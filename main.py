@@ -31,8 +31,12 @@ async def update_data(request: Request):
     # Commit locally (skip push)
     relative_path = os.path.relpath(DATA_FILE, GIT_REPO_PATH)
     try:
+        print(data)
         subprocess.run(["git", "add", relative_path], cwd=GIT_REPO_PATH, check=True)
-        commit_message = f"Update data {datetime.now().isoformat()}"
+        book_title = data.get("title", "Unknown Book")
+        commit_message = (
+            f"Update progress for '{book_title}' - {datetime.now().isoformat()}"
+        )
         subprocess.run(
             ["git", "commit", "-m", commit_message], cwd=GIT_REPO_PATH, check=True
         )
