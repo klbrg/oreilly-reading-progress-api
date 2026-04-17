@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "O'Reilly Reader",
-  "version": "1.9.1",
+  "version": "1.10.2",
   "description": "Progressive-reveal reader for O'Reilly books with a playlist sidebar. Syncs progress to a local FastAPI.",
   "icons": {
     "128": "icons/icon128.png"

@@ -13,7 +13,7 @@
         listUserCollections, itemsFromCollection, fetchBookMeta,
         collectionSkeleton, collectionTitle,
         pickNextBook,
-        createPlaylist, deletePlaylistRemote, addBooksToPlaylist, removeCollectionItem,
+        createPlaylist, deletePlaylistRemote, removeCollectionItem,
     } = window.OReillyAPI;
 
     const STATE_KEY = 'oreilly-reader-sidebar-state';
@@ -33,57 +33,75 @@
             position: fixed;
             top: 0; left: 0; bottom: 0;
             width: 280px;
-            background: #1f2430;
-            color: #e6e6e6;
-            font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            color: #1f2933;
+            font: 13px/1.45 "Charter", "Noto Serif", "Times New Roman", serif;
             z-index: 2147483646;
             display: flex;
             flex-direction: column;
             transform: translateX(-280px);
             transition: transform 0.22s ease;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+            border-right: 1px solid rgba(0, 0, 0, 0.08);
         }
+        .sb, .sb * { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
         .sb.open { transform: translateX(0); }
+
         .sb-header {
-            padding: 10px 12px;
-            border-bottom: 1px solid #2c3240;
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 8px;
+            background: rgba(250, 250, 250, 0.5);
         }
-        .sb-title { font-size: 13px; font-weight: 600; color: #cfd3dc; letter-spacing: 0.3px; }
-        .sb-refresh {
-            background: transparent;
-            border: 1px solid #3a4050;
-            color: #cfd3dc;
-            border-radius: 4px;
-            padding: 3px 8px;
+        .sb-title {
             font-size: 11px;
-            cursor: pointer;
+            font-weight: 600;
+            color: #4a5056;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
         }
-        .sb-refresh:hover { background: #262c3a; }
+        .sb-refresh {
+            background: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            color: #374151;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+        }
+        .sb-refresh:hover { border-color: rgba(0, 0, 0, 0.25); color: #111827; background: rgba(255, 255, 255, 0.85); }
         .sb-refresh:disabled { opacity: 0.5; cursor: default; }
-        .sb-body { flex: 1; overflow-y: auto; padding: 6px 0 16px; }
-        .sb-body::-webkit-scrollbar { width: 8px; }
-        .sb-body::-webkit-scrollbar-thumb { background: #394151; border-radius: 4px; }
 
-        .folder { border-bottom: 1px solid #262b37; }
+        .sb-body { flex: 1; overflow-y: auto; padding: 2px 0 20px; }
+        .sb-body::-webkit-scrollbar { width: 8px; }
+        .sb-body::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 4px; }
+        .sb-body::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
+
+        .folder { border-bottom: 1px solid rgba(0, 0, 0, 0.05); }
+        .folder:last-child { border-bottom: none; }
         .folder-row {
             display: flex;
             align-items: center;
-            padding: 8px 12px;
+            padding: 10px 14px;
             cursor: pointer;
             user-select: none;
             gap: 8px;
+            transition: background 0.08s ease;
         }
-        .folder-row:hover { background: #262c3a; }
+        .folder-row:hover { background: rgba(0, 0, 0, 0.04); }
         .chev {
             display: inline-block;
             width: 10px;
             transition: transform 0.15s ease;
-            color: #8c93a3;
-            font-size: 10px;
+            color: #9ca3af;
+            font-size: 9px;
+            flex-shrink: 0;
         }
         .folder.open .chev { transform: rotate(90deg); }
         .folder-name {
@@ -92,123 +110,102 @@
             text-overflow: ellipsis;
             white-space: nowrap;
             font-weight: 500;
+            color: #1f2933;
         }
-        .folder-count { color: #8c93a3; font-size: 11px; }
+        .folder-count { color: #9ca3af; font-size: 11px; font-variant-numeric: tabular-nums; }
+
         .pin-btn {
             background: transparent;
             border: none;
-            color: #5a6170;
+            color: #c0c4c9;
             cursor: pointer;
             font-size: 13px;
-            padding: 0 4px;
+            padding: 0 3px;
             line-height: 1;
             opacity: 0;
             transition: opacity 0.12s ease, color 0.12s ease;
         }
         .folder-row:hover .pin-btn { opacity: 1; }
-        .pin-btn.pinned { color: #e2b84a; opacity: 1; }
-        .pin-btn:hover { color: #f5d97a; }
+        .pin-btn.pinned { color: #d97706; opacity: 1; }
+        .pin-btn:hover { color: #d97706; }
 
         .folder.dragging { opacity: 0.4; }
-        .folder.drop-before { box-shadow: inset 0 2px 0 0 #c0392b; }
-        .folder.drop-after { box-shadow: inset 0 -2px 0 0 #c0392b; }
+        .folder.drop-before { box-shadow: inset 0 2px 0 0 #cc2030; }
+        .folder.drop-after { box-shadow: inset 0 -2px 0 0 #cc2030; }
         .folder-row { cursor: grab; }
         .folder-row:active { cursor: grabbing; }
 
         .folder-del {
             background: transparent;
             border: none;
-            color: #6b7280;
+            color: #c0c4c9;
             cursor: pointer;
-            font-size: 14px;
-            padding: 0 4px;
+            font-size: 16px;
+            padding: 0 3px;
             line-height: 1;
             opacity: 0;
             transition: opacity 0.12s ease, color 0.12s ease;
         }
         .folder-row:hover .folder-del { opacity: 1; }
-        .folder-del:hover { color: #e74c3c; }
+        .folder-del:hover { color: #cc2030; }
 
         .tile-del {
             position: absolute;
-            top: 3px;
-            right: 3px;
-            width: 18px;
-            height: 18px;
+            top: 4px;
+            right: 4px;
+            width: 20px;
+            height: 20px;
             border-radius: 50%;
-            background: rgba(30, 30, 30, 0.8);
-            color: #fff;
-            border: none;
+            background: rgba(255, 255, 255, 0.95);
+            color: #4a5056;
+            border: 1px solid #e4e4e7;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 13px;
             line-height: 1;
             padding: 0;
             opacity: 0;
-            transition: opacity 0.12s ease, background 0.12s ease;
+            transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
             display: flex;
             align-items: center;
             justify-content: center;
         }
         .tile:hover .tile-del { opacity: 1; }
-        .tile-del:hover { background: #e74c3c; }
+        .tile-del:hover { color: #cc2030; border-color: #cc2030; }
 
-        .add-tile {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            aspect-ratio: 3 / 4;
-            border: 1.5px dashed #4a5165;
-            border-radius: 4px;
-            color: #8c93a3;
-            cursor: pointer;
-            font-size: 20px;
-            background: transparent;
-            transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
-        }
-        .add-tile:hover { border-color: #c0392b; color: #c0392b; background: rgba(192, 57, 43, 0.05); }
-        .add-tile.editing { border-style: solid; padding: 6px; cursor: default; background: transparent; }
-        .add-tile.editing:hover { border-color: #c0392b; }
-        .add-tile input {
-            width: 100%;
-            background: transparent;
-            color: #e6e6e6;
-            border: none;
-            outline: none;
-            font-size: 10px;
-            font-family: inherit;
-            text-align: center;
-        }
         .tile-del.confirming, .folder-del.confirming {
-            background: #e74c3c !important;
+            background: #cc2030 !important;
             color: #fff !important;
             opacity: 1 !important;
-            border-radius: 3px;
+            border-color: #cc2030 !important;
+            border-radius: 50%;
         }
+        .folder-del.confirming { border-radius: 3px; background: #cc2030 !important; padding: 2px 6px; font-size: 11px; }
 
         .new-row {
-            padding: 8px 12px;
-            border-bottom: 1px solid #2c3240;
-            background: #262c3a;
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            background: rgba(250, 250, 250, 0.5);
         }
         .new-row input {
             width: 100%;
-            background: #1f2430;
-            color: #e6e6e6;
-            border: 1px solid #4a5165;
+            background: #ffffff;
+            color: #1f2933;
+            border: 1px solid #d1d5db;
             border-radius: 4px;
             padding: 6px 8px;
             font-size: 13px;
             font-family: inherit;
             outline: none;
+            transition: border-color 0.12s ease, box-shadow 0.12s ease;
         }
-        .new-row input:focus { border-color: #c0392b; }
+        .new-row input:focus { border-color: #cc2030; box-shadow: 0 0 0 2px rgba(204,32,48,0.15); }
 
         .toast {
             position: absolute;
             left: 12px;
             right: 12px;
             bottom: 12px;
-            background: #c0392b;
+            background: #1f2933;
             color: #fff;
             padding: 8px 12px;
             border-radius: 4px;
@@ -217,47 +214,47 @@
             opacity: 0;
             transition: opacity 0.18s ease;
             pointer-events: none;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
         .toast.show { opacity: 1; }
 
         .active-dot {
-            width: 9px;
-            height: 9px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            border: 1.5px solid #6b7280;
+            border: 1.5px solid #c0c4c9;
             background: transparent;
             cursor: pointer;
             padding: 0;
             flex-shrink: 0;
             transition: background 0.12s ease, border-color 0.12s ease;
         }
-        .active-dot:hover { border-color: #c0392b; }
-        .active-dot.on { background: #c0392b; border-color: #c0392b; }
-        .folder.active > .folder-row { background: #262c3a; }
-        .folder.active > .folder-row .folder-name { color: #fff; }
+        .active-dot:hover { border-color: #cc2030; }
+        .active-dot.on { background: #cc2030; border-color: #cc2030; }
+        .folder.active > .folder-row { background: rgba(204, 32, 48, 0.08); }
+        .folder.active > .folder-row .folder-name { color: #cc2030; font-weight: 600; }
 
         .grid {
             display: none;
             grid-template-columns: repeat(3, 1fr);
             gap: 10px;
-            padding: 6px 12px 14px;
+            padding: 4px 14px 14px;
         }
         .folder.open .grid { display: grid; }
 
         .tile {
             display: block;
             cursor: pointer;
-            border-radius: 4px;
+            border-radius: 3px;
             overflow: hidden;
-            background: #2a3040;
+            background: #f1f1f3;
             position: relative;
             aspect-ratio: 3 / 4;
             transition: transform 0.12s ease, box-shadow 0.12s ease;
         }
         .tile:hover {
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
         }
         .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .tile .fallback {
@@ -269,14 +266,14 @@
             text-align: center;
             padding: 6px;
             font-size: 10px;
-            color: #b8bdc7;
+            color: #4a5056;
             line-height: 1.25;
         }
-        .tile.current { outline: 2px solid #c0392b; outline-offset: -2px; }
+        .tile.current { outline: 2px solid #cc2030; outline-offset: -2px; }
 
         .loading, .empty {
-            padding: 12px 14px;
-            color: #8c93a3;
+            padding: 14px 16px;
+            color: #6b7280;
             font-size: 12px;
             line-height: 1.5;
         }
@@ -286,20 +283,22 @@
             top: 50%;
             left: 0;
             transform: translateY(-50%);
-            width: 22px;
-            height: 56px;
-            background: #1f2430;
-            color: #e6e6e6;
-            border: none;
-            border-radius: 0 6px 6px 0;
+            width: 18px;
+            height: 48px;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            color: #6b7280;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-left: none;
+            border-radius: 0 4px 4px 0;
             cursor: pointer;
             z-index: 2147483647;
-            font-size: 13px;
+            font-size: 12px;
             padding: 0;
-            box-shadow: 2px 0 6px rgba(0,0,0,0.2);
-            transition: left 0.22s ease;
+            transition: left 0.22s ease, background 0.12s ease, color 0.12s ease;
         }
-        .toggle:hover { background: #262c3a; }
+        .toggle:hover { background: rgba(255, 255, 255, 0.9); color: #111827; }
         .toggle.open { left: 280px; }
     `;
     root.appendChild(style);
@@ -344,6 +343,7 @@
         sb.classList.toggle('open', state.open);
         toggle.classList.toggle('open', state.open);
         toggle.textContent = state.open ? '‹' : '›';
+        document.documentElement.style.setProperty('--reader-sidebar-offset', state.open ? '280px' : '0px');
     }
     applyOpen();
 
@@ -554,63 +554,6 @@
         return tile;
     }
 
-    function renderAddBookTile(pid) {
-        const tile = document.createElement('div');
-        tile.className = 'add-tile';
-        tile.title = 'Add a book by URL or ISBN';
-
-        const showButton = () => {
-            tile.classList.remove('editing');
-            tile.innerHTML = '';
-            tile.textContent = '+';
-            tile.onclick = (e) => { e.stopPropagation(); showInput(); };
-        };
-        const showInput = () => {
-            tile.classList.add('editing');
-            tile.innerHTML = '';
-            tile.onclick = null;
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.placeholder = 'URL or ISBN';
-            tile.appendChild(input);
-            setTimeout(() => input.focus(), 0);
-
-            const submit = async () => {
-                const raw = input.value.trim();
-                if (!raw) { showButton(); return; }
-                const isbn = extractIsbn(raw);
-                if (!isbn) { showToast('Could not parse ISBN'); return; }
-                input.disabled = true;
-                try {
-                    await addBooksToPlaylist(pid, [isbn]);
-                    localStorage.removeItem(LIST_CACHE_KEY);
-                    await syncPlaylists(true);
-                    await refresh();
-                } catch (err) {
-                    showToast('Add failed: ' + err.message);
-                    showButton();
-                }
-            };
-
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') { e.preventDefault(); submit(); }
-                else if (e.key === 'Escape') { e.preventDefault(); showButton(); }
-                e.stopPropagation();
-            });
-            input.addEventListener('blur', () => {
-                setTimeout(() => { if (!input.disabled) showButton(); }, 150);
-            });
-        };
-
-        showButton();
-        return tile;
-    }
-
-    function extractIsbn(s) {
-        const m = s.match(/(\d{10,13})/);
-        return m ? m[1] : null;
-    }
-
     function renderGrid(grid, books, latest, curBook, pid) {
         grid.innerHTML = '';
         if (!books || books.length === 0) {
@@ -619,12 +562,11 @@
             ld.textContent = 'Loading books…';
             ld.style.gridColumn = '1 / -1';
             grid.appendChild(ld);
-        } else {
-            for (const book of books) {
-                grid.appendChild(renderTile(book, latest, curBook, pid));
-            }
+            return;
         }
-        grid.appendChild(renderAddBookTile(pid));
+        for (const book of books) {
+            grid.appendChild(renderTile(book, latest, curBook, pid));
+        }
     }
 
     function orderedIds(playlists) {

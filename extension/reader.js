@@ -147,7 +147,8 @@
         wrapper.id = 'reader-progress';
         wrapper.style.position = 'fixed';
         wrapper.style.top = '0';
-        wrapper.style.left = '0';
+        wrapper.style.left = 'var(--reader-sidebar-offset, 0px)';
+        wrapper.style.transition = 'left 0.22s ease';
         wrapper.style.right = '0';
         wrapper.style.zIndex = '999999';
         wrapper.style.background = '#fff';
