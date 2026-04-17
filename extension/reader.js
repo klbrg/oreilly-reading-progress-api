@@ -1,0 +1,331 @@
+// Progressive-reveal reader for /library/view/* pages.
+// Ported from tampermonkey.js; uses window.OReillyAPI for persistence.
+
+(function () {
+    'use strict';
+
+    const {
+        getData, saveProgress,
+        pickNextBook, nextCandidates, latestByBook,
+        bookIdFromUrl,
+        ACTIVE_PLAYLIST_KEY,
+    } = window.OReillyAPI;
+    const ACTIVE_KEY = ACTIVE_PLAYLIST_KEY;
+
+    const storageKey = 'oreilly-reader-progress-' + location.pathname.split('/').filter(Boolean).join('-');
+    console.log(`[Reader] Storage Key: ${storageKey}`);
+
+    function currentBookId() { return bookIdFromUrl(location.href); }
+
+    let index = 0;
+    let groupedBlocks = [];
+
+    async function loadProgress() {
+        try {
+            const data = await getData();
+            if (data?.storage?.[storageKey]) {
+                return data.storage[storageKey].index ?? 0;
+            }
+        } catch (err) {
+            console.warn('[Reader] Failed to load progress from API', err);
+        }
+        return 0;
+    }
+
+    async function persist() {
+        const entry = {
+            index,
+            date: new Date().toISOString(),
+            url: location.href,
+            title: document.title,
+        };
+        try {
+            await saveProgress(storageKey, entry);
+            console.log(`[Reader] Saved index ${index}`);
+        } catch (err) {
+            alert('[Reader] Failed to save progress');
+            console.warn('[Reader] Failed to save progress:', err);
+        }
+    }
+
+    function waitForContent(attempts = 0) {
+        const container = document.querySelector('#sbo-rt-content');
+        if (!container) {
+            if (attempts < 20) return setTimeout(() => waitForContent(attempts + 1), 500);
+            else return console.log('[Reader] Failed to find #sbo-rt-content');
+        }
+
+        const figures = Array.from(container.querySelectorAll('figure'));
+        figures.forEach(fig => fig.setAttribute('data-reader-block', 'true'));
+        container.querySelectorAll('p.codelink').forEach(el => el.remove());
+
+        let elements = Array.from(container.querySelectorAll(
+            'figure, .orm-Figure, .orm-CodeBlock, .code-area-container, h1, h2, h3, h4, h5, h6, table, pre, ul, ol, dl, p, img, mjx-container, blockquote'
+        ));
+
+        elements = elements.filter(el => {
+            const tag = el.tagName.toLowerCase();
+            if (!el.classList.contains('code-area-container') && el.closest('.code-area-container')) return false;
+            const nestedListAncestor = el.closest('ul ul, ol ul, ul ol, ol ol, li ul, li ol, dl dd');
+            if (nestedListAncestor) return false;
+            if (tag === 'li') {
+                const parent = el.parentElement;
+                return parent && parent.tagName.toLowerCase() === 'ul' && !parent.closest('ul ul, ol ul, li ul');
+            }
+            if (tag === 'ul' || tag === 'ol') return !el.closest('ul ul, ol ul, li ul, li ol');
+            if (tag === 'img') if (el.closest('figure, .orm-Figure, .orm-CodeBlock, p, dl dt a, pre a, h1, h2')) return false;
+            if (['img', 'table', 'p', 'h6'].includes(tag)) {
+                if (el.closest('figure, .orm-Figure, .orm-CodeBlock, blockquote')) return false;
+                if (el.closest('li') && el.closest('li').closest('ul ul, ol ul, li ul')) return false;
+            }
+            if (tag === 'pre' && el.closest('li')) return false;
+            return true;
+        });
+
+        if (elements.length === 0) {
+            if (attempts < 20) return setTimeout(() => waitForContent(attempts + 1), 500);
+            else return console.log('[Reader] No readable elements found');
+        }
+
+        groupedBlocks = [];
+        let buffer = [];
+
+        function isInsideContext(el) {
+            return el.closest('figure, table, pre, ul, ol, dl, .orm-Figure, .orm-CodeBlock, .code-area-container');
+        }
+
+        for (let el of elements) {
+            const tag = el.tagName.toLowerCase();
+            const isPara = tag === 'p';
+            const isContext = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'figure', 'table', 'pre', 'img', 'ul', 'ol', 'dl', 'mjx-container', 'blockquote'].includes(tag)
+                || el.classList.contains('orm-Figure')
+                || el.classList.contains('orm-CodeBlock')
+                || el.classList.contains('code-area-container');
+
+            if (isPara && isInsideContext(el)) continue;
+
+            if (el.hasAttribute('data-reader-block')) {
+                if (buffer.length > 0) {
+                    const wrapper = document.createElement('div');
+                    buffer.forEach(b => wrapper.appendChild(b));
+                    groupedBlocks.push(wrapper);
+                    buffer = [];
+                }
+                const wrapper = document.createElement('div');
+                wrapper.appendChild(el.cloneNode(true));
+                groupedBlocks.push(wrapper);
+                continue;
+            }
+
+            if (isContext || isPara) buffer.push(el.cloneNode(true));
+            if (isPara && buffer.length > 0) {
+                const wrapper = document.createElement('div');
+                buffer.forEach(b => wrapper.appendChild(b));
+                groupedBlocks.push(wrapper);
+                buffer = [];
+            }
+        }
+
+        if (buffer.length > 0) {
+            const wrapper = document.createElement('div');
+            buffer.forEach(b => wrapper.appendChild(b));
+            groupedBlocks.push(wrapper);
+        }
+
+        if (groupedBlocks.length === 0) {
+            console.log('[Reader] No paragraph groups created');
+            return;
+        }
+
+        createProgressDisplay(container);
+        render(container);
+        setupNavigation(container);
+    }
+
+    function createProgressDisplay() {
+        const wrapper = document.createElement('div');
+        wrapper.id = 'reader-progress';
+        wrapper.style.position = 'fixed';
+        wrapper.style.top = '0';
+        wrapper.style.left = '0';
+        wrapper.style.right = '0';
+        wrapper.style.zIndex = '999999';
+        wrapper.style.background = '#fff';
+        wrapper.style.borderBottom = '1px solid #ddd';
+
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.padding = '0.3em 1em';
+        row.style.gap = '0.75em';
+
+        const label = document.createElement('div');
+        label.id = 'reader-progress-label';
+        label.style.flex = '1';
+        label.style.fontSize = '1em';
+        label.style.color = '#555';
+
+        const nextBtn = document.createElement('button');
+        nextBtn.id = 'reader-next-book-btn';
+        nextBtn.textContent = 'Next book →';
+        nextBtn.title = 'Jump to the least-recently-read book in the active playlist (ö)';
+        nextBtn.style.cssText = 'padding:0.25em 0.8em;font-size:0.85em;border:1px solid #bbb;border-radius:4px;background:#fafafa;cursor:pointer;color:#333;';
+        nextBtn.addEventListener('mouseenter', () => nextBtn.style.background = '#eee');
+        nextBtn.addEventListener('mouseleave', () => nextBtn.style.background = '#fafafa');
+        nextBtn.addEventListener('click', async () => {
+            nextBtn.disabled = true;
+            nextBtn.textContent = '…';
+            const next = await pickNextBook();
+            if (!next) {
+                nextBtn.textContent = 'No other books';
+                setTimeout(() => { nextBtn.textContent = 'Next book →'; nextBtn.disabled = false; }, 1500);
+                return;
+            }
+            if (next.playlistId) localStorage.setItem(ACTIVE_KEY, next.playlistId);
+            location.href = next.url;
+        });
+
+        row.appendChild(label);
+        row.appendChild(nextBtn);
+
+        const track = document.createElement('div');
+        track.style.height = '4px';
+        track.style.background = '#e8e8e8';
+
+        const fill = document.createElement('div');
+        fill.id = 'reader-progress-fill';
+        fill.style.height = '100%';
+        fill.style.background = '#c0392b';
+        fill.style.width = '0%';
+        fill.style.transition = 'width 0.3s ease';
+
+        track.appendChild(fill);
+        wrapper.appendChild(row);
+        wrapper.appendChild(track);
+        document.body.appendChild(wrapper);
+        document.body.style.paddingTop = '3em';
+    }
+
+    function updateProgressDisplay() {
+        const label = document.getElementById('reader-progress-label');
+        const fill = document.getElementById('reader-progress-fill');
+        if (!label || !fill) return;
+        const getWordCount = el => el.textContent.trim().split(/\s+/).length;
+        const wordsRead = groupedBlocks.slice(0, index + 1).reduce((sum, block) => sum + getWordCount(block), 0);
+        const totalWords = groupedBlocks.reduce((sum, block) => sum + getWordCount(block), 0);
+        const percent = totalWords > 0 ? Math.floor((wordsRead / totalWords) * 100) : 0;
+        label.textContent = `Section ${index + 1} of ${groupedBlocks.length} · ${percent}% read`;
+        fill.style.width = `${percent}%`;
+    }
+
+    function createNextButton(container) {
+        const btn = document.createElement('button');
+        btn.id = 'reader-next-btn';
+        btn.textContent = 'Read more';
+        btn.style.display = 'block';
+        btn.style.margin = '2em auto';
+        btn.style.padding = '0.6em 1.6em';
+        btn.style.fontSize = '1em';
+        btn.style.cursor = 'pointer';
+        btn.style.borderRadius = '6px';
+        btn.style.border = '1px solid #888';
+        btn.addEventListener('click', () => advance(container));
+        container.appendChild(btn);
+    }
+
+    function render(container) {
+        index = Math.max(0, Math.min(index, groupedBlocks.length - 1));
+        container.innerHTML = '';
+        for (let i = 0; i <= index; i++) {
+            container.appendChild(groupedBlocks[i]);
+        }
+        updateProgressDisplay();
+        if (index < groupedBlocks.length - 1) {
+            createNextButton(container);
+        }
+        console.log(`[Reader] Restored up to index ${index}`);
+        if (index > 0) {
+            setTimeout(() => groupedBlocks[index].scrollIntoView({ behavior: 'instant', block: 'start' }), 500);
+        }
+    }
+
+    function advance(container) {
+        if (index >= groupedBlocks.length - 1) return;
+        index++;
+
+        const existingBtn = document.getElementById('reader-next-btn');
+        if (existingBtn) existingBtn.remove();
+
+        const newBlock = groupedBlocks[index];
+        container.appendChild(newBlock);
+        setTimeout(() => newBlock.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+
+        if (index < groupedBlocks.length - 1) {
+            createNextButton(container);
+        }
+
+        updateProgressDisplay();
+        persist();
+    }
+
+    function retreat(container) {
+        if (index <= 0) return;
+
+        const existingBtn = document.getElementById('reader-next-btn');
+        if (existingBtn) existingBtn.remove();
+
+        container.removeChild(groupedBlocks[index]);
+        index--;
+
+        createNextButton(container);
+        setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 50);
+
+        updateProgressDisplay();
+        persist();
+    }
+
+    function setupNavigation(container) {
+        const handler = (e) => {
+            if (e.target && e.target.matches && e.target.matches('input, textarea, [contenteditable="true"]')) return;
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+            if (e.key === 'f' && !e.shiftKey) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                advance(container);
+            } else if (e.key === 'd' && !e.shiftKey) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                retreat(container);
+            }
+        };
+        window.addEventListener('keydown', handler, true);
+    }
+
+    async function warmPlaylist() {
+        const list = await nextCandidates();
+        if (list.length === 0) return;
+        const prerenderUrls = list.slice(0, 2).map(c => c.url).filter(Boolean);
+        const prefetchUrls = list.slice(2).map(c => c.url).filter(Boolean);
+
+        document.querySelectorAll('script[data-reader-speculation]').forEach(n => n.remove());
+        const rules = {};
+        if (prerenderUrls.length) rules.prerender = [{ urls: prerenderUrls, eagerness: 'immediate' }];
+        if (prefetchUrls.length) rules.prefetch = [{ urls: prefetchUrls, eagerness: 'immediate' }];
+        if (!rules.prerender && !rules.prefetch) return;
+
+        const script = document.createElement('script');
+        script.type = 'speculationrules';
+        script.setAttribute('data-reader-speculation', 'true');
+        script.textContent = JSON.stringify(rules);
+        document.head.appendChild(script);
+        console.log(`[Reader] Prerender ${prerenderUrls.length}, prefetch ${prefetchUrls.length}`);
+    }
+
+    async function init() {
+        index = await loadProgress();
+        waitForContent();
+        warmPlaylist();
+    }
+
+    init();
+})();
