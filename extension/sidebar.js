@@ -13,7 +13,7 @@
         listUserCollections, itemsFromCollection, fetchBookMeta,
         collectionSkeleton, collectionTitle,
         pickNextBook,
-        createPlaylist, deletePlaylistRemote, removeCollectionItem, reorderPlaylistBooks,
+        createPlaylist, removeCollectionItem, reorderPlaylistBooks,
     } = window.OReillyAPI;
 
     const STATE_KEY = 'oreilly-reader-sidebar-state';
@@ -144,20 +144,6 @@
         .folder-row { cursor: grab; }
         .folder-row:active { cursor: grabbing; }
 
-        .folder-del {
-            background: transparent;
-            border: none;
-            color: #c0c4c9;
-            cursor: pointer;
-            font-size: 18px;
-            padding: 0 3px;
-            line-height: 1;
-            opacity: 0.5;
-            transition: opacity 0.12s ease, color 0.12s ease;
-        }
-        .folder-row:hover .folder-del { opacity: 1; }
-        .folder-del:hover { color: #d80000; opacity: 1; }
-
         .tile-del {
             position: absolute;
             top: 4px;
@@ -181,14 +167,13 @@
         .tile:hover .tile-del { opacity: 1; }
         .tile-del:hover { color: #d80000; border-color: #d80000; }
 
-        .tile-del.confirming, .folder-del.confirming {
+        .tile-del.confirming {
             background: #d80000 !important;
             color: #fff !important;
             opacity: 1 !important;
             border-color: #d80000 !important;
             border-radius: 50%;
         }
-        .folder-del.confirming { border-radius: 3px; background: #d80000 !important; padding: 2px 6px; font-size: 12px; }
 
         .new-row {
             padding: 10px 14px;
@@ -242,7 +227,7 @@
             display: none;
             grid-template-columns: repeat(3, 1fr);
             gap: 10px;
-            padding: 4px 14px 14px;
+            padding: 12px 14px 14px;
         }
         .folder.open .grid { display: grid; }
 
@@ -321,33 +306,21 @@
             color: #111111;
             line-height: 1.25;
         }
-        .tile.current { box-shadow:
-            0 0 0 2px #d80000,
-            1px 0 0 2px #fafaf6,
-            2px 0 0 2px #efece4,
-            3px 0 0 2px #e2ddd0,
-            4px 0 0 2px #d2ccba,
-            2px 2px 3px 0 rgba(216,0,0,0.18),
-            5px 6px 14px -2px rgba(216,0,0,0.30),
-            8px 12px 28px -4px rgba(216,0,0,0.18); }
-        .tile.current:hover { box-shadow:
-            0 0 0 2px #d80000,
-            1px 0 0 2px #fafaf6,
-            2px 0 0 2px #efece4,
-            3px 0 0 2px #e2ddd0,
-            4px 0 0 2px #d2ccba,
-            5px 0 0 2px #c0b8a0,
-            2px 4px 6px 0 rgba(216,0,0,0.22),
-            7px 10px 20px -2px rgba(216,0,0,0.36),
-            12px 18px 36px -4px rgba(216,0,0,0.24); }
-        .tile.current:active { box-shadow:
-            0 0 0 2px #d80000,
-            1px 0 0 2px #fafaf6,
-            2px 0 0 2px #efece4,
-            3px 0 0 2px #e2ddd0,
-            4px 0 0 2px #d2ccba,
-            2px 2px 3px 0 rgba(216,0,0,0.18),
-            4px 4px 8px -1px rgba(216,0,0,0.20); }
+        .tile .bookmark {
+            position: absolute;
+            top: 0;
+            right: 8px;
+            width: 9px;
+            height: 22%;
+            background: linear-gradient(to right, #a80000 0%, #d80000 45%, #a80000 100%);
+            z-index: 3;
+            clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
+            filter:
+                drop-shadow(0 0 0.5px #111111)
+                drop-shadow(0 0 0.5px #111111)
+                drop-shadow(0 0 0.5px #ffffff);
+            pointer-events: none;
+        }
         .drop-marker {
             aspect-ratio: 3 / 4;
             border: 2px dashed #d80000;
@@ -383,7 +356,7 @@
             padding: 0;
             transition: left 0.22s ease, background 0.12s ease, transform 0.06s ease, box-shadow 0.06s ease;
         }
-        .toggle:hover { background: #fff5f5; }
+        .toggle:hover { background: #f5f5f5; }
         .toggle:active { transform: translateY(calc(-50% + 2px)) translateX(2px); box-shadow: 0 0 0 0 #111111; }
         .toggle.open { left: 283px; }
     `;
@@ -680,8 +653,14 @@
 
     function renderTile(book, latest, curBook, pid, playlist) {
         const tile = document.createElement('div');
-        tile.className = 'tile' + (book.id === curBook ? ' current' : '');
+        const isCurrent = book.id === curBook;
+        tile.className = 'tile' + (isCurrent ? ' current' : '');
         tile.title = book.title;
+        if (isCurrent) {
+            const bm = document.createElement('span');
+            bm.className = 'bookmark';
+            tile.appendChild(bm);
+        }
         const entry = latest.get(book.id);
         const targetUrl = entry?.url || book.url;
 
@@ -827,7 +806,6 @@
                 <span class="chev">❯</span>
                 <span class="folder-name">${escapeHtml(p.title || pid)}</span>
                 <span class="folder-count">${(p.books || []).length}</span>
-                <button class="folder-del" title="Delete playlist">×</button>
             `;
             folder.appendChild(row);
 
@@ -837,8 +815,6 @@
             folder.appendChild(grid);
 
             row.addEventListener('click', (e) => {
-                const cls = e.target.classList;
-                if (cls.contains('folder-del')) return;
                 if (e.shiftKey) {
                     e.preventDefault();
                     const current = localStorage.getItem(ACTIVE_KEY);
@@ -851,17 +827,6 @@
                 folder.classList.toggle('open', !wasOpen);
                 state.expanded[pid] = !wasOpen;
                 writeState(state);
-            });
-
-            armConfirm(row.querySelector('.folder-del'), async () => {
-                try {
-                    await deletePlaylistRemote(pid);
-                    localStorage.removeItem(LIST_CACHE_KEY);
-                    await syncPlaylists(true);
-                    await refresh();
-                } catch (err) {
-                    showToast('Delete failed: ' + err.message);
-                }
             });
 
             setupDragDrop(folder, pid);

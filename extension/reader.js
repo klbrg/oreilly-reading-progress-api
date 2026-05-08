@@ -163,12 +163,11 @@
         const label = document.createElement('div');
         label.id = 'reader-progress-label';
         label.style.flex = '1';
-        label.style.fontSize = '0.85em';
-        label.style.fontWeight = '700';
+        label.style.minWidth = '0';
         label.style.fontFamily = 'ui-monospace, "SF Mono", Menlo, monospace';
         label.style.color = '#111111';
-        label.style.textTransform = 'uppercase';
-        label.style.letterSpacing = '0.5px';
+        label.style.lineHeight = '1.25';
+        label.style.overflow = 'hidden';
 
         const nextBtn = document.createElement('button');
         nextBtn.id = 'reader-next-book-btn';
@@ -213,7 +212,29 @@
         wrapper.appendChild(row);
         wrapper.appendChild(track);
         document.body.appendChild(wrapper);
-        document.body.style.paddingTop = '3em';
+        document.body.style.paddingTop = '3.6em';
+    }
+
+    function escapeText(s) {
+        return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+
+    function getBookTitle() {
+        const meta = document.querySelector('meta[name="dcterms.title"], meta[property="og:title"], meta[name="book"]');
+        if (meta) {
+            const v = meta.getAttribute('content');
+            if (v) return v.trim();
+        }
+        const t = (document.title || '').trim();
+        return t.split(/ \| | - O'Reilly| — O'Reilly/)[0] || t;
+    }
+
+    function getChapterTitle() {
+        for (let i = index; i >= 0; i--) {
+            const h = groupedBlocks[i] && groupedBlocks[i].querySelector('h1, h2, h3, h4');
+            if (h && h.textContent.trim()) return h.textContent.trim();
+        }
+        return '';
     }
 
     function updateProgressDisplay() {
@@ -224,7 +245,13 @@
         const wordsRead = groupedBlocks.slice(0, index + 1).reduce((sum, block) => sum + getWordCount(block), 0);
         const totalWords = groupedBlocks.reduce((sum, block) => sum + getWordCount(block), 0);
         const percent = totalWords > 0 ? Math.floor((wordsRead / totalWords) * 100) : 0;
-        label.textContent = `Section ${index + 1} of ${groupedBlocks.length} · ${percent}% read`;
+        const book = getBookTitle();
+        const chapter = getChapterTitle();
+        const meta = `Section ${index + 1} of ${groupedBlocks.length} · ${percent}% read`;
+        label.innerHTML = `
+            <div style="font-size:0.85em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeText(book)}</div>
+            <div style="font-size:0.72em;font-weight:500;letter-spacing:0.2px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${chapter ? escapeText(chapter) + ' · ' : ''}${meta}</div>
+        `;
         fill.style.width = `${percent}%`;
     }
 
