@@ -151,8 +151,8 @@
         wrapper.style.transition = 'left 0.22s ease';
         wrapper.style.right = '0';
         wrapper.style.zIndex = '999999';
-        wrapper.style.background = '#fff';
-        wrapper.style.borderBottom = '1px solid #ddd';
+        wrapper.style.background = '#ffffff';
+        wrapper.style.borderBottom = '3px solid #111111';
 
         const row = document.createElement('div');
         row.style.display = 'flex';
@@ -163,16 +163,24 @@
         const label = document.createElement('div');
         label.id = 'reader-progress-label';
         label.style.flex = '1';
-        label.style.fontSize = '1em';
-        label.style.color = '#555';
+        label.style.fontSize = '0.85em';
+        label.style.fontWeight = '700';
+        label.style.fontFamily = 'ui-monospace, "SF Mono", Menlo, monospace';
+        label.style.color = '#111111';
+        label.style.textTransform = 'uppercase';
+        label.style.letterSpacing = '0.5px';
 
         const nextBtn = document.createElement('button');
         nextBtn.id = 'reader-next-book-btn';
         nextBtn.textContent = 'Next book →';
-        nextBtn.title = 'Jump to the least-recently-read book in the active playlist (ö)';
-        nextBtn.style.cssText = 'padding:0.25em 0.8em;font-size:0.85em;border:1px solid #bbb;border-radius:4px;background:#fafafa;cursor:pointer;color:#333;';
-        nextBtn.addEventListener('mouseenter', () => nextBtn.style.background = '#eee');
-        nextBtn.addEventListener('mouseleave', () => nextBtn.style.background = '#fafafa');
+        nextBtn.title = 'Jump to the least-recently-read book in the active playlist';
+        nextBtn.style.cssText = 'padding:0.25em 0.8em;font-size:0.75em;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;font-family:ui-monospace, "SF Mono", Menlo, monospace;border:2px solid #111111;border-radius:3px;background:#ffffff;cursor:pointer;color:#111111;box-shadow:2px 2px 0 0 #111111;transition:transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease;';
+        nextBtn.addEventListener('mouseenter', () => nextBtn.style.background = '#f3f3f3');
+        nextBtn.addEventListener('mouseleave', () => nextBtn.style.background = '#ffffff');
+        nextBtn.addEventListener('mousedown', () => { nextBtn.style.transform = 'translate(2px, 2px)'; nextBtn.style.boxShadow = '0 0 0 0 #111111'; });
+        const releaseNextPress = () => { nextBtn.style.transform = ''; nextBtn.style.boxShadow = '2px 2px 0 0 #111111'; };
+        nextBtn.addEventListener('mouseup', releaseNextPress);
+        nextBtn.addEventListener('mouseleave', releaseNextPress);
         nextBtn.addEventListener('click', async () => {
             nextBtn.disabled = true;
             nextBtn.textContent = '…';
@@ -190,13 +198,14 @@
         row.appendChild(nextBtn);
 
         const track = document.createElement('div');
-        track.style.height = '4px';
-        track.style.background = '#e8e8e8';
+        track.style.height = '10px';
+        track.style.background = '#ffffff';
+        track.style.borderTop = '2px solid #111111';
 
         const fill = document.createElement('div');
         fill.id = 'reader-progress-fill';
         fill.style.height = '100%';
-        fill.style.background = '#c0392b';
+        fill.style.background = '#d80000';
         fill.style.width = '0%';
         fill.style.transition = 'width 0.3s ease';
 
@@ -223,13 +232,35 @@
         const btn = document.createElement('button');
         btn.id = 'reader-next-btn';
         btn.textContent = 'Read more';
-        btn.style.display = 'block';
-        btn.style.margin = '2em auto';
-        btn.style.padding = '0.6em 1.6em';
-        btn.style.fontSize = '1em';
-        btn.style.cursor = 'pointer';
-        btn.style.borderRadius = '6px';
-        btn.style.border = '1px solid #888';
+        btn.style.cssText = `
+            display: block;
+            margin: 2em auto;
+            padding: 0.45em 1.3em;
+            font-size: 0.8em;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
+            cursor: pointer;
+            color: #ffffff;
+            background: #d80000;
+            border: 2px solid #111111;
+            border-radius: 4px;
+            box-shadow: 4px 4px 0 0 #111111;
+            transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease;
+        `;
+        btn.addEventListener('mouseenter', () => btn.style.background = '#ff1a1a');
+        btn.addEventListener('mouseleave', () => btn.style.background = '#d80000');
+        btn.addEventListener('mousedown', () => {
+            btn.style.transform = 'translate(4px, 4px)';
+            btn.style.boxShadow = '0 0 0 0 #111111';
+        });
+        const releasePress = () => {
+            btn.style.transform = '';
+            btn.style.boxShadow = '4px 4px 0 0 #111111';
+        };
+        btn.addEventListener('mouseup', releasePress);
+        btn.addEventListener('mouseleave', releasePress);
         btn.addEventListener('click', () => advance(container));
         container.appendChild(btn);
     }
@@ -287,7 +318,8 @@
 
     function setupNavigation(container) {
         const handler = (e) => {
-            if (e.target && e.target.matches && e.target.matches('input, textarea, [contenteditable="true"]')) return;
+            const realTarget = (e.composedPath && e.composedPath()[0]) || e.target;
+            if (realTarget && realTarget.matches && realTarget.matches('input, textarea, [contenteditable="true"]')) return;
             if (e.metaKey || e.ctrlKey || e.altKey) return;
             if (e.key === 'f' && !e.shiftKey) {
                 e.preventDefault();

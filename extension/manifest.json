@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "O'Reilly Reader",
-  "version": "1.10.2",
+  "version": "1.13.23",
   "description": "Progressive-reveal reader for O'Reilly books with a playlist sidebar. Syncs progress to a local FastAPI.",
   "icons": {
     "128": "icons/icon128.png"
@@ -14,8 +14,7 @@
     {
       "matches": ["https://learning.oreilly.com/*"],
       "exclude_matches": [
-        "https://learning.oreilly.com/library/view/*",
-        "https://learning.oreilly.com/playlists/*"
+        "https://learning.oreilly.com/library/view/*"
       ],
       "js": ["api.js", "sidebar.js"],
       "run_at": "document_idle"
@@ -23,11 +22,6 @@
     {
       "matches": ["https://learning.oreilly.com/library/view/*"],
       "js": ["api.js", "sidebar.js", "reader.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://learning.oreilly.com/playlists/*"],
-      "js": ["api.js", "sidebar.js", "playlist-page.js"],
       "run_at": "document_idle"
     }
   ]

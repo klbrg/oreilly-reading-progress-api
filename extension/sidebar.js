@@ -13,7 +13,7 @@
         listUserCollections, itemsFromCollection, fetchBookMeta,
         collectionSkeleton, collectionTitle,
         pickNextBook,
-        createPlaylist, deletePlaylistRemote, removeCollectionItem,
+        createPlaylist, deletePlaylistRemote, removeCollectionItem, reorderPlaylistBooks,
     } = window.OReillyAPI;
 
     const STATE_KEY = 'oreilly-reader-sidebar-state';
@@ -33,74 +33,85 @@
             position: fixed;
             top: 0; left: 0; bottom: 0;
             width: 280px;
-            background: rgba(255, 255, 255, 0.72);
-            backdrop-filter: blur(20px) saturate(180%);
-            -webkit-backdrop-filter: blur(20px) saturate(180%);
-            color: #1f2933;
-            font: 13px/1.45 "Charter", "Noto Serif", "Times New Roman", serif;
+            background: #ffffff;
+            color: #111111;
+            font: 14px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
             z-index: 2147483646;
             display: flex;
             flex-direction: column;
-            transform: translateX(-280px);
+            transform: translateX(-283px);
             transition: transform 0.22s ease;
-            border-right: 1px solid rgba(0, 0, 0, 0.08);
+            border-right: 3px solid #111111;
         }
-        .sb, .sb * { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
         .sb.open { transform: translateX(0); }
 
         .sb-header {
             padding: 10px 14px;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            border-bottom: 2px solid #111111;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 8px;
-            background: rgba(250, 250, 250, 0.5);
+            background: #ffffff;
         }
         .sb-title {
-            font-size: 11px;
-            font-weight: 600;
-            color: #4a5056;
+            font-size: 12px;
+            font-weight: 700;
+            color: #111111;
             text-transform: uppercase;
-            letter-spacing: 0.8px;
+            letter-spacing: 1px;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
         }
         .sb-refresh {
-            background: rgba(255, 255, 255, 0.6);
-            border: 1px solid rgba(0, 0, 0, 0.12);
-            color: #374151;
-            border-radius: 4px;
+            background: #ffffff;
+            border: 2px solid #111111;
+            color: #111111;
+            border-radius: 3px;
             padding: 4px 10px;
             font-size: 11px;
-            font-weight: 500;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
             cursor: pointer;
-            transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+            box-shadow: 2px 2px 0 0 #111111;
+            transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease;
         }
-        .sb-refresh:hover { border-color: rgba(0, 0, 0, 0.25); color: #111827; background: rgba(255, 255, 255, 0.85); }
-        .sb-refresh:disabled { opacity: 0.5; cursor: default; }
+        .sb-refresh#new-playlist { background: #d80000; color: #ffffff; }
+        .sb-refresh:hover { background: #fff5cc; }
+        .sb-refresh#new-playlist:hover { background: #ff1a1a; }
+        .sb-refresh:active { transform: translate(2px, 2px); box-shadow: 0 0 0 0 #111111; }
+        .sb-refresh:disabled { opacity: 0.5; cursor: default; box-shadow: 2px 2px 0 0 #111111; transform: none; }
 
         .sb-body { flex: 1; overflow-y: auto; padding: 2px 0 20px; }
         .sb-body::-webkit-scrollbar { width: 8px; }
         .sb-body::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 4px; }
         .sb-body::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
 
-        .folder { border-bottom: 1px solid rgba(0, 0, 0, 0.05); }
-        .folder:last-child { border-bottom: none; }
+        .folder { padding: 4px 10px; }
         .folder-row {
             display: flex;
             align-items: center;
-            padding: 10px 14px;
+            padding: 8px 10px;
+            margin: 0;
+            background: #f7f7f5;
+            border: 2px solid #111111;
+            border-radius: 3px;
+            box-shadow: 2px 2px 0 0 #111111;
             cursor: pointer;
             user-select: none;
             gap: 8px;
-            transition: background 0.08s ease;
+            transition: transform 0.06s ease, box-shadow 0.06s ease;
         }
-        .folder-row:hover { background: rgba(0, 0, 0, 0.04); }
+        .folder-row:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 0 #111111; }
+        .folder-row:active { transform: translate(2px, 2px); box-shadow: 0 0 0 0 #111111; }
         .chev {
             display: inline-block;
-            width: 10px;
+            width: 12px;
             transition: transform 0.15s ease;
-            color: #9ca3af;
-            font-size: 9px;
+            color: #111111;
+            font-size: 11px;
+            font-weight: 900;
             flex-shrink: 0;
         }
         .folder.open .chev { transform: rotate(90deg); }
@@ -109,29 +120,27 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            font-weight: 500;
-            color: #1f2933;
+            font-weight: 700;
+            font-size: 12px;
+            letter-spacing: 0.2px;
+            color: #111111;
         }
-        .folder-count { color: #9ca3af; font-size: 11px; font-variant-numeric: tabular-nums; }
-
-        .pin-btn {
-            background: transparent;
-            border: none;
-            color: #c0c4c9;
-            cursor: pointer;
-            font-size: 13px;
-            padding: 0 3px;
-            line-height: 1;
-            opacity: 0;
-            transition: opacity 0.12s ease, color 0.12s ease;
+        .folder-count {
+            color: #ffffff;
+            background: #111111;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
+            font-size: 11px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            padding: 1px 6px;
+            border-radius: 3px;
+            min-width: 20px;
+            text-align: center;
         }
-        .folder-row:hover .pin-btn { opacity: 1; }
-        .pin-btn.pinned { color: #d97706; opacity: 1; }
-        .pin-btn:hover { color: #d97706; }
 
         .folder.dragging { opacity: 0.4; }
-        .folder.drop-before { box-shadow: inset 0 2px 0 0 #cc2030; }
-        .folder.drop-after { box-shadow: inset 0 -2px 0 0 #cc2030; }
+        .folder.drop-before { box-shadow: inset 0 2px 0 0 #d80000; }
+        .folder.drop-after { box-shadow: inset 0 -2px 0 0 #d80000; }
         .folder-row { cursor: grab; }
         .folder-row:active { cursor: grabbing; }
 
@@ -140,27 +149,27 @@
             border: none;
             color: #c0c4c9;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 18px;
             padding: 0 3px;
             line-height: 1;
-            opacity: 0;
+            opacity: 0.5;
             transition: opacity 0.12s ease, color 0.12s ease;
         }
         .folder-row:hover .folder-del { opacity: 1; }
-        .folder-del:hover { color: #cc2030; }
+        .folder-del:hover { color: #d80000; opacity: 1; }
 
         .tile-del {
             position: absolute;
             top: 4px;
             right: 4px;
-            width: 20px;
-            height: 20px;
+            width: 22px;
+            height: 22px;
             border-radius: 50%;
             background: rgba(255, 255, 255, 0.95);
             color: #4a5056;
             border: 1px solid #e4e4e7;
             cursor: pointer;
-            font-size: 13px;
+            font-size: 15px;
             line-height: 1;
             padding: 0;
             opacity: 0;
@@ -170,69 +179,64 @@
             justify-content: center;
         }
         .tile:hover .tile-del { opacity: 1; }
-        .tile-del:hover { color: #cc2030; border-color: #cc2030; }
+        .tile-del:hover { color: #d80000; border-color: #d80000; }
 
         .tile-del.confirming, .folder-del.confirming {
-            background: #cc2030 !important;
+            background: #d80000 !important;
             color: #fff !important;
             opacity: 1 !important;
-            border-color: #cc2030 !important;
+            border-color: #d80000 !important;
             border-radius: 50%;
         }
-        .folder-del.confirming { border-radius: 3px; background: #cc2030 !important; padding: 2px 6px; font-size: 11px; }
+        .folder-del.confirming { border-radius: 3px; background: #d80000 !important; padding: 2px 6px; font-size: 12px; }
 
         .new-row {
             padding: 10px 14px;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-            background: rgba(250, 250, 250, 0.5);
+            border-bottom: 2px solid #111111;
+            background: #ffffff;
         }
         .new-row input {
             width: 100%;
             background: #ffffff;
-            color: #1f2933;
-            border: 1px solid #d1d5db;
-            border-radius: 4px;
+            color: #111111;
+            border: 2px solid #111111;
+            border-radius: 3px;
             padding: 6px 8px;
-            font-size: 13px;
+            font-size: 15px;
             font-family: inherit;
             outline: none;
-            transition: border-color 0.12s ease, box-shadow 0.12s ease;
+            box-shadow: 2px 2px 0 0 #111111;
+            transition: box-shadow 0.12s ease;
         }
-        .new-row input:focus { border-color: #cc2030; box-shadow: 0 0 0 2px rgba(204,32,48,0.15); }
+        .new-row input:focus { box-shadow: 3px 3px 0 0 #d80000; }
 
         .toast {
             position: absolute;
             left: 12px;
             right: 12px;
             bottom: 12px;
-            background: #1f2933;
-            color: #fff;
+            background: #d80000;
+            color: #ffffff;
             padding: 8px 12px;
-            border-radius: 4px;
+            border: 2px solid #111111;
+            border-radius: 3px;
             font-size: 12px;
+            font-weight: 600;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
             z-index: 20;
             opacity: 0;
             transition: opacity 0.18s ease;
             pointer-events: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 4px 4px 0 0 #111111;
         }
         .toast.show { opacity: 1; }
 
-        .active-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            border: 1.5px solid #c0c4c9;
-            background: transparent;
-            cursor: pointer;
-            padding: 0;
-            flex-shrink: 0;
-            transition: background 0.12s ease, border-color 0.12s ease;
-        }
-        .active-dot:hover { border-color: #cc2030; }
-        .active-dot.on { background: #cc2030; border-color: #cc2030; }
-        .folder.active > .folder-row { background: rgba(204, 32, 48, 0.08); }
-        .folder.active > .folder-row .folder-name { color: #cc2030; font-weight: 600; }
+        .folder.active > .folder-row { border-color: #d80000; box-shadow: 2px 2px 0 0 #d80000; }
+        .folder.active > .folder-row:hover { box-shadow: 3px 3px 0 0 #d80000; }
+        .folder.active > .folder-row:active { box-shadow: 0 0 0 0 #d80000; }
+        .folder.active > .folder-row .folder-name { color: #111111; font-weight: 700; }
 
         .grid {
             display: none;
@@ -245,16 +249,63 @@
         .tile {
             display: block;
             cursor: pointer;
-            border-radius: 3px;
+            border-radius: 1px 3px 3px 1px;
             overflow: hidden;
-            background: #f1f1f3;
+            background: #ffffff;
             position: relative;
             aspect-ratio: 3 / 4;
+            box-shadow:
+                0 0 0 1px rgba(0,0,0,0.15),
+                1px 0 0 1px #fafaf6,
+                2px 0 0 1px #efece4,
+                3px 0 0 1px #e2ddd0,
+                4px 0 0 1px #d2ccba,
+                2px 2px 3px 0 rgba(0,0,0,0.12),
+                5px 6px 14px -2px rgba(0,0,0,0.20),
+                8px 12px 28px -4px rgba(0,0,0,0.12);
             transition: transform 0.12s ease, box-shadow 0.12s ease;
         }
+        .tile::before {
+            content: '';
+            position: absolute;
+            top: 0; bottom: 0; left: 0;
+            width: 8px;
+            background: linear-gradient(to right, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.18) 30%, rgba(0,0,0,0.06) 60%, rgba(0,0,0,0) 100%);
+            pointer-events: none;
+            z-index: 2;
+        }
+        .tile::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 5px;
+            background: linear-gradient(to bottom, rgba(255,255,255,0.16), rgba(255,255,255,0));
+            pointer-events: none;
+            z-index: 2;
+        }
         .tile:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            transform: translate(-1px, -3px);
+            box-shadow:
+                0 0 0 1px rgba(0,0,0,0.18),
+                1px 0 0 1px #fafaf6,
+                2px 0 0 1px #efece4,
+                3px 0 0 1px #e2ddd0,
+                4px 0 0 1px #d2ccba,
+                5px 0 0 1px #c0b8a0,
+                2px 4px 6px 0 rgba(0,0,0,0.15),
+                7px 10px 20px -2px rgba(0,0,0,0.25),
+                12px 18px 36px -4px rgba(0,0,0,0.18);
+        }
+        .tile:active {
+            transform: translate(0, 1px);
+            box-shadow:
+                0 0 0 1px rgba(0,0,0,0.15),
+                1px 0 0 1px #fafaf6,
+                2px 0 0 1px #efece4,
+                3px 0 0 1px #e2ddd0,
+                4px 0 0 1px #d2ccba,
+                2px 2px 3px 0 rgba(0,0,0,0.12),
+                4px 4px 8px -1px rgba(0,0,0,0.15);
         }
         .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .tile .fallback {
@@ -265,16 +316,50 @@
             justify-content: center;
             text-align: center;
             padding: 6px;
-            font-size: 10px;
-            color: #4a5056;
+            font-size: 11px;
+            font-weight: 600;
+            color: #111111;
             line-height: 1.25;
         }
-        .tile.current { outline: 2px solid #cc2030; outline-offset: -2px; }
+        .tile.current { box-shadow:
+            0 0 0 2px #d80000,
+            1px 0 0 2px #fafaf6,
+            2px 0 0 2px #efece4,
+            3px 0 0 2px #e2ddd0,
+            4px 0 0 2px #d2ccba,
+            2px 2px 3px 0 rgba(216,0,0,0.18),
+            5px 6px 14px -2px rgba(216,0,0,0.30),
+            8px 12px 28px -4px rgba(216,0,0,0.18); }
+        .tile.current:hover { box-shadow:
+            0 0 0 2px #d80000,
+            1px 0 0 2px #fafaf6,
+            2px 0 0 2px #efece4,
+            3px 0 0 2px #e2ddd0,
+            4px 0 0 2px #d2ccba,
+            5px 0 0 2px #c0b8a0,
+            2px 4px 6px 0 rgba(216,0,0,0.22),
+            7px 10px 20px -2px rgba(216,0,0,0.36),
+            12px 18px 36px -4px rgba(216,0,0,0.24); }
+        .tile.current:active { box-shadow:
+            0 0 0 2px #d80000,
+            1px 0 0 2px #fafaf6,
+            2px 0 0 2px #efece4,
+            3px 0 0 2px #e2ddd0,
+            4px 0 0 2px #d2ccba,
+            2px 2px 3px 0 rgba(216,0,0,0.18),
+            4px 4px 8px -1px rgba(216,0,0,0.20); }
+        .drop-marker {
+            aspect-ratio: 3 / 4;
+            border: 2px dashed #d80000;
+            border-radius: 3px;
+            background: rgba(216, 0, 0, 0.08);
+            pointer-events: none;
+        }
 
         .loading, .empty {
             padding: 14px 16px;
             color: #6b7280;
-            font-size: 12px;
+            font-size: 13px;
             line-height: 1.5;
         }
 
@@ -283,23 +368,24 @@
             top: 50%;
             left: 0;
             transform: translateY(-50%);
-            width: 18px;
-            height: 48px;
-            background: rgba(255, 255, 255, 0.7);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            color: #6b7280;
-            border: 1px solid rgba(0, 0, 0, 0.1);
+            width: 22px;
+            height: 56px;
+            background: #d80000;
+            color: #ffffff;
+            border: 2px solid #111111;
             border-left: none;
             border-radius: 0 4px 4px 0;
+            box-shadow: 2px 2px 0 0 #111111;
             cursor: pointer;
             z-index: 2147483647;
-            font-size: 12px;
+            font-size: 16px;
+            font-weight: 700;
             padding: 0;
-            transition: left 0.22s ease, background 0.12s ease, color 0.12s ease;
+            transition: left 0.22s ease, background 0.12s ease, transform 0.06s ease, box-shadow 0.06s ease;
         }
-        .toggle:hover { background: rgba(255, 255, 255, 0.9); color: #111827; }
-        .toggle.open { left: 280px; }
+        .toggle:hover { background: #ff1a1a; }
+        .toggle:active { transform: translateY(calc(-50% + 2px)) translateX(2px); box-shadow: 0 0 0 0 #111111; }
+        .toggle.open { left: 283px; }
     `;
     root.appendChild(style);
 
@@ -322,7 +408,7 @@
     const toggle = document.createElement('button');
     toggle.className = 'toggle';
     toggle.textContent = '›';
-    toggle.title = 'Show/hide reader sidebar';
+    toggle.title = 'Show/hide reader sidebar (ö)';
     root.appendChild(toggle);
 
     function readState() {
@@ -335,8 +421,7 @@
     const state = Object.assign({
         open: false,
         expanded: {},
-        order: [],   // custom ordering of playlist ids; ids not here fall back to alphabetical
-        pinned: [],  // subset of playlist ids pinned to top
+        order: [],
     }, readState());
 
     function applyOpen() {
@@ -452,17 +537,19 @@
             }
         }
 
-        const missing = new Set();
+        const missing = new Map();
         for (const coll of colls) {
-            for (const { isbn } of itemsFromCollection(coll)) {
-                if (!bookCache.has(String(isbn))) missing.add(String(isbn));
+            for (const { isbn, type } of itemsFromCollection(coll)) {
+                if (!bookCache.has(String(isbn))) missing.set(String(isbn), type);
             }
         }
 
         if (missing.size > 0) {
-            console.log(`[Sidebar] Fetching metadata for ${missing.size} book(s)…`);
+            console.log(`[Sidebar] Fetching metadata for ${missing.size} item(s)…`);
             const fetched = await Promise.all(
-                Array.from(missing).map(isbn => fetchBookMeta(isbn).catch(() => null))
+                Array.from(missing.entries()).map(([isbn, type]) =>
+                    fetchBookMeta(isbn, type).catch(() => null)
+                )
             );
             for (const b of fetched) {
                 if (b && b.id) bookCache.set(String(b.id), b);
@@ -502,7 +589,96 @@
 
     // --- render ---
 
-    function renderTile(book, latest, curBook, pid) {
+    let activeDrag = null;
+
+    function setupTileDragDrop(tile, book, playlist) {
+        tile.draggable = true;
+        tile.dataset.bookId = book.id;
+
+        tile.addEventListener('dragstart', (e) => {
+            const origin = (e.composedPath && e.composedPath()[0]) || e.target;
+            if (origin && origin.closest && origin.closest('.tile-del')) {
+                e.preventDefault();
+                return;
+            }
+            e.stopPropagation();
+            e.dataTransfer.setData('application/x-book', JSON.stringify({
+                bookId: book.id,
+                playlistId: playlist.id,
+            }));
+            e.dataTransfer.effectAllowed = 'move';
+            const grid = tile.parentElement;
+            const marker = document.createElement('div');
+            marker.className = 'drop-marker';
+            activeDrag = { tile, marker, grid, playlist, book };
+            setTimeout(() => {
+                if (activeDrag && activeDrag.tile === tile && tile.parentElement === grid) {
+                    grid.replaceChild(marker, tile);
+                }
+            }, 0);
+        });
+
+        tile.addEventListener('dragend', () => {
+            if (!activeDrag) return;
+            if (activeDrag.marker.parentElement) {
+                activeDrag.marker.replaceWith(activeDrag.tile);
+            }
+            activeDrag = null;
+        });
+
+        tile.addEventListener('dragover', (e) => {
+            if (!activeDrag) return;
+            if (activeDrag.playlist.id !== playlist.id) return;
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'move';
+            const rect = tile.getBoundingClientRect();
+            const before = (e.clientX - rect.left) < rect.width / 2;
+            const ref = before ? tile : tile.nextSibling;
+            if (activeDrag.marker !== ref && activeDrag.marker.nextSibling !== ref) {
+                activeDrag.grid.insertBefore(activeDrag.marker, ref);
+            }
+        });
+
+        tile.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!activeDrag) return;
+            if (activeDrag.playlist.id !== playlist.id) {
+                showToast('Cross-playlist move not supported yet');
+                return;
+            }
+
+            const grid = activeDrag.grid;
+            const draggedId = activeDrag.book.id;
+            const newOrderIds = [];
+            for (const child of Array.from(grid.children)) {
+                if (child === activeDrag.marker) {
+                    newOrderIds.push(draggedId);
+                } else if (child.dataset && child.dataset.bookId) {
+                    newOrderIds.push(child.dataset.bookId);
+                }
+            }
+
+            activeDrag.marker.remove();
+            activeDrag = null;
+
+            const byId = new Map(playlist.books.map(b => [b.id, b]));
+            const ourns = newOrderIds.map(id => `urn:orm:book:${id}`);
+
+            try {
+                await reorderPlaylistBooks(playlist.id, ourns);
+                localStorage.removeItem(LIST_CACHE_KEY);
+                await syncPlaylists(true);
+                await refresh();
+            } catch (err) {
+                showToast('Reorder failed: ' + err.message);
+                await refresh();
+            }
+        });
+    }
+
+    function renderTile(book, latest, curBook, pid, playlist) {
         const tile = document.createElement('div');
         tile.className = 'tile' + (book.id === curBook ? ' current' : '');
         tile.title = book.title;
@@ -551,10 +727,12 @@
             if (pid) localStorage.setItem(ACTIVE_KEY, pid);
             if (targetUrl) location.href = targetUrl;
         });
+
+        if (playlist) setupTileDragDrop(tile, book, playlist);
         return tile;
     }
 
-    function renderGrid(grid, books, latest, curBook, pid) {
+    function renderGrid(grid, books, latest, curBook, pid, playlist) {
         grid.innerHTML = '';
         if (!books || books.length === 0) {
             const ld = document.createElement('div');
@@ -565,20 +743,16 @@
             return;
         }
         for (const book of books) {
-            grid.appendChild(renderTile(book, latest, curBook, pid));
+            grid.appendChild(renderTile(book, latest, curBook, pid, playlist));
         }
     }
 
     function orderedIds(playlists) {
         const all = Object.keys(playlists);
-        const pinned = new Set(state.pinned);
         const known = new Set(state.order);
         const extras = all.filter(id => !known.has(id));
         extras.sort((a, b) => (playlists[a].title || '').localeCompare(playlists[b].title || ''));
-        const full = [...state.order.filter(id => all.includes(id)), ...extras];
-        const pinnedIds = full.filter(id => pinned.has(id));
-        const rest = full.filter(id => !pinned.has(id));
-        return [...pinnedIds, ...rest];
+        return [...state.order.filter(id => all.includes(id)), ...extras];
     }
 
     function setupDragDrop(folder, pid) {
@@ -636,7 +810,6 @@
             return;
         }
 
-        const pinned = new Set(state.pinned);
         const activePid = localStorage.getItem(ACTIVE_KEY) || '';
         const frag = document.createDocumentFragment();
         for (const pid of ids) {
@@ -648,13 +821,11 @@
 
             const row = document.createElement('div');
             row.className = 'folder-row';
-            const isPinned = pinned.has(pid);
             const isActive = pid === activePid;
+            row.title = isActive ? 'Active playlist · shift+click to clear' : 'Click to expand · shift+click to set as active';
             row.innerHTML = `
-                <span class="chev">▶</span>
-                <button class="active-dot${isActive ? ' on' : ''}" title="${isActive ? 'Active playlist (for Next book)' : 'Set as active playlist'}"></button>
+                <span class="chev">❯</span>
                 <span class="folder-name">${escapeHtml(p.title || pid)}</span>
-                <button class="pin-btn${isPinned ? ' pinned' : ''}" title="${isPinned ? 'Unpin' : 'Pin to top'}">${isPinned ? '★' : '☆'}</button>
                 <span class="folder-count">${(p.books || []).length}</span>
                 <button class="folder-del" title="Delete playlist">×</button>
             `;
@@ -662,12 +833,20 @@
 
             const grid = document.createElement('div');
             grid.className = 'grid';
-            renderGrid(grid, p.books, latest, curBook, pid);
+            renderGrid(grid, p.books, latest, curBook, pid, p);
             folder.appendChild(grid);
 
             row.addEventListener('click', (e) => {
                 const cls = e.target.classList;
-                if (cls.contains('pin-btn') || cls.contains('active-dot') || cls.contains('folder-del')) return;
+                if (cls.contains('folder-del')) return;
+                if (e.shiftKey) {
+                    e.preventDefault();
+                    const current = localStorage.getItem(ACTIVE_KEY);
+                    if (current === pid) localStorage.removeItem(ACTIVE_KEY);
+                    else localStorage.setItem(ACTIVE_KEY, pid);
+                    render(data);
+                    return;
+                }
                 const wasOpen = folder.classList.contains('open');
                 folder.classList.toggle('open', !wasOpen);
                 state.expanded[pid] = !wasOpen;
@@ -683,26 +862,6 @@
                 } catch (err) {
                     showToast('Delete failed: ' + err.message);
                 }
-            });
-
-            row.querySelector('.pin-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                const set = new Set(state.pinned);
-                if (set.has(pid)) set.delete(pid); else set.add(pid);
-                state.pinned = Array.from(set);
-                writeState(state);
-                render(data);
-            });
-
-            row.querySelector('.active-dot').addEventListener('click', (e) => {
-                e.stopPropagation();
-                const current = localStorage.getItem(ACTIVE_KEY);
-                if (current === pid) {
-                    localStorage.removeItem(ACTIVE_KEY);
-                } else {
-                    localStorage.setItem(ACTIVE_KEY, pid);
-                }
-                render(data);
             });
 
             setupDragDrop(folder, pid);
@@ -772,17 +931,15 @@
     });
 
     window.addEventListener('keydown', (e) => {
-        if (e.target && e.target.matches && e.target.matches('input, textarea, [contenteditable="true"]')) return;
+        const realTarget = (e.composedPath && e.composedPath()[0]) || e.target;
+        if (realTarget && realTarget.matches && realTarget.matches('input, textarea, [contenteditable="true"]')) return;
         if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
         if (e.key !== 'ö') return;
         e.preventDefault();
         e.stopImmediatePropagation();
-        (async () => {
-            const next = await pickNextBook();
-            if (!next) return;
-            if (next.playlistId) localStorage.setItem(ACTIVE_KEY, next.playlistId);
-            location.href = next.url;
-        })();
+        state.open = !state.open;
+        writeState(state);
+        applyOpen();
     }, true);
 
     (async () => {

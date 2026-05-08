@@ -76,19 +76,27 @@
 
     function itemsFromCollection(coll) {
         const items = (coll.content || [])
-            .filter(c =>
-                c.content_type === 'PLATFORM_CONTENT' &&
-                typeof c.ourn === 'string' &&
-                c.ourn.startsWith('urn:orm:book:'))
+            .filter(c => c.content_type === 'PLATFORM_CONTENT' && typeof c.ourn === 'string')
             .sort((a, b) => (b.index || 0) - (a.index || 0));
-        return items.map(c => ({
-            isbn: c.ourn.slice('urn:orm:book:'.length),
-            itemId: c.id,
-        }));
+        return items.map(c => {
+            const m = c.ourn.match(/^urn:orm:([^:]+):(.+)$/);
+            if (!m) return null;
+            return {
+                isbn: m[2],
+                type: m[1],
+                itemId: c.id,
+                ourn: c.ourn,
+            };
+        }).filter(Boolean);
     }
 
     function isbnsFromCollection(coll) {
         return itemsFromCollection(coll).map(i => i.isbn);
+    }
+
+    function contentUrl(id, type) {
+        if (type === 'video') return `${OREILLY}/course/-/${id}/`;
+        return `${OREILLY}/library/view/-/${id}/`;
     }
 
     // --- mutations ---
@@ -143,14 +151,26 @@
         return mutate(`${OREILLY}/api/v3/collection-items/${encodeURIComponent(itemId)}/`, 'DELETE');
     }
 
-    async function fetchBookMeta(isbn) {
-        const raw = await tryJson([`${OREILLY}/api/v2/epubs/urn:orm:book:${encodeURIComponent(isbn)}/`]);
-        if (!raw) return null;
+    async function reorderPlaylistBooks(pid, ourns) {
+        return mutate(
+            `${OREILLY}/api/v3/collections/${encodeURIComponent(pid)}/reorder-content-ourns/`,
+            'POST',
+            { content: [ourns] }
+        );
+    }
+
+    async function fetchBookMeta(isbn, type = 'book') {
+        const raw = await tryJson([
+            `${OREILLY}/api/v2/epubs/urn:orm:${type}:${encodeURIComponent(isbn)}/`,
+            `${OREILLY}/api/v2/epubs/urn:orm:book:${encodeURIComponent(isbn)}/`,
+        ]);
+        const title = raw ? (pick(raw, 'title', 'name') || String(isbn)) : String(isbn);
         return {
             id: String(isbn),
-            title: pick(raw, 'title', 'name') || String(isbn),
+            title,
             cover: `${OREILLY}/library/cover/${isbn}/400w/`,
-            url: `${OREILLY}/library/view/-/${isbn}/`,
+            url: contentUrl(isbn, type),
+            type,
         };
     }
 
@@ -250,6 +270,7 @@
         deletePlaylistRemote,
         addBooksToPlaylist,
         removeCollectionItem,
+        reorderPlaylistBooks,
         bookIdFromUrl,
         latestByBook,
         pickNextBook,
