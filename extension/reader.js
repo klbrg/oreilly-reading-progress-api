@@ -175,7 +175,7 @@
         nextBtn.textContent = 'Next book →';
         nextBtn.title = 'Jump to the least-recently-read book in the active playlist';
         nextBtn.style.cssText = 'padding:0.25em 0.8em;font-size:0.75em;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;font-family:ui-monospace, "SF Mono", Menlo, monospace;border:2px solid #111111;border-radius:3px;background:#ffffff;cursor:pointer;color:#111111;box-shadow:2px 2px 0 0 #111111;transition:transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease;';
-        nextBtn.addEventListener('mouseenter', () => nextBtn.style.background = '#f3f3f3');
+        nextBtn.addEventListener('mouseenter', () => nextBtn.style.background = '#f5f5f5');
         nextBtn.addEventListener('mouseleave', () => nextBtn.style.background = '#ffffff');
         nextBtn.addEventListener('mousedown', () => { nextBtn.style.transform = 'translate(2px, 2px)'; nextBtn.style.boxShadow = '0 0 0 0 #111111'; });
         const releaseNextPress = () => { nextBtn.style.transform = ''; nextBtn.style.boxShadow = '2px 2px 0 0 #111111'; };
@@ -242,15 +242,15 @@
             text-transform: uppercase;
             font-family: ui-monospace, "SF Mono", Menlo, monospace;
             cursor: pointer;
-            color: #ffffff;
-            background: #d80000;
+            color: #111111;
+            background: #ffffff;
             border: 2px solid #111111;
             border-radius: 4px;
             box-shadow: 4px 4px 0 0 #111111;
             transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease;
         `;
-        btn.addEventListener('mouseenter', () => btn.style.background = '#ff1a1a');
-        btn.addEventListener('mouseleave', () => btn.style.background = '#d80000');
+        btn.addEventListener('mouseenter', () => btn.style.background = '#f5f5f5');
+        btn.addEventListener('mouseleave', () => btn.style.background = '#ffffff');
         btn.addEventListener('mousedown', () => {
             btn.style.transform = 'translate(4px, 4px)';
             btn.style.boxShadow = '0 0 0 0 #111111';

@@ -78,7 +78,7 @@
             transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease;
         }
         .sb-refresh#new-playlist { background: #d80000; color: #ffffff; }
-        .sb-refresh:hover { background: #fff5cc; }
+        .sb-refresh:hover { background: #f5f5f5; }
         .sb-refresh#new-playlist:hover { background: #ff1a1a; }
         .sb-refresh:active { transform: translate(2px, 2px); box-shadow: 0 0 0 0 #111111; }
         .sb-refresh:disabled { opacity: 0.5; cursor: default; box-shadow: 2px 2px 0 0 #111111; transform: none; }
@@ -370,8 +370,8 @@
             transform: translateY(-50%);
             width: 22px;
             height: 56px;
-            background: #d80000;
-            color: #ffffff;
+            background: #ffffff;
+            color: #d80000;
             border: 2px solid #111111;
             border-left: none;
             border-radius: 0 4px 4px 0;
@@ -383,7 +383,7 @@
             padding: 0;
             transition: left 0.22s ease, background 0.12s ease, transform 0.06s ease, box-shadow 0.06s ease;
         }
-        .toggle:hover { background: #ff1a1a; }
+        .toggle:hover { background: #fff5f5; }
         .toggle:active { transform: translateY(calc(-50% + 2px)) translateX(2px); box-shadow: 0 0 0 0 #111111; }
         .toggle.open { left: 283px; }
     `;
