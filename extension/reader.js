@@ -8,9 +8,8 @@
         getData, saveProgress,
         pickNextBook, nextCandidates, latestByBook,
         bookIdFromUrl,
-        ACTIVE_PLAYLIST_KEY,
+        addToCurrentlyReading, removeFromCurrentlyReading, isCurrentlyReading,
     } = window.OReillyAPI;
-    const ACTIVE_KEY = ACTIVE_PLAYLIST_KEY;
 
     const storageKey = 'oreilly-reader-progress-' + location.pathname.split('/').filter(Boolean).join('-');
     console.log(`[Reader] Storage Key: ${storageKey}`);
@@ -169,10 +168,36 @@
         label.style.lineHeight = '1.25';
         label.style.overflow = 'hidden';
 
+        const readingBtn = document.createElement('button');
+        readingBtn.id = 'reader-reading-btn';
+        const baseBtnCss = 'padding:0.25em 0.8em;font-size:0.75em;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;font-family:ui-monospace, "SF Mono", Menlo, monospace;border:2px solid #111111;border-radius:3px;cursor:pointer;box-shadow:2px 2px 0 0 #111111;transition:transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease, color 0.12s ease;';
+        function applyReadingState() {
+            const here = isCurrentlyReading(currentBookId());
+            readingBtn.textContent = here ? '✓ Reading' : '+ Reading';
+            readingBtn.title = here ? 'Remove from Currently Reading' : 'Add to Currently Reading';
+            const bg = here ? '#d80000' : '#ffffff';
+            const fg = here ? '#ffffff' : '#111111';
+            readingBtn.style.cssText = baseBtnCss + `background:${bg};color:${fg};`;
+        }
+        applyReadingState();
+        readingBtn.addEventListener('mousedown', () => { readingBtn.style.transform = 'translate(2px, 2px)'; readingBtn.style.boxShadow = '0 0 0 0 #111111'; });
+        const releaseReadingPress = () => { readingBtn.style.transform = ''; readingBtn.style.boxShadow = '2px 2px 0 0 #111111'; };
+        readingBtn.addEventListener('mouseup', releaseReadingPress);
+        readingBtn.addEventListener('mouseleave', releaseReadingPress);
+        readingBtn.addEventListener('click', () => {
+            const id = currentBookId();
+            if (!id) return;
+            if (isCurrentlyReading(id)) removeFromCurrentlyReading(id);
+            else addToCurrentlyReading(id);
+            applyReadingState();
+            window.dispatchEvent(new CustomEvent('oreilly-reading-changed'));
+        });
+        window.addEventListener('oreilly-reading-changed', applyReadingState);
+
         const nextBtn = document.createElement('button');
         nextBtn.id = 'reader-next-book-btn';
         nextBtn.textContent = 'Next book →';
-        nextBtn.title = 'Jump to the least-recently-read book in the active playlist';
+        nextBtn.title = 'Jump to the next book in your Currently Reading list';
         nextBtn.style.cssText = 'padding:0.25em 0.8em;font-size:0.75em;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;font-family:ui-monospace, "SF Mono", Menlo, monospace;border:2px solid #111111;border-radius:3px;background:#ffffff;cursor:pointer;color:#111111;box-shadow:2px 2px 0 0 #111111;transition:transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease;';
         nextBtn.addEventListener('mouseenter', () => nextBtn.style.background = '#f5f5f5');
         nextBtn.addEventListener('mouseleave', () => nextBtn.style.background = '#ffffff');
@@ -189,11 +214,11 @@
                 setTimeout(() => { nextBtn.textContent = 'Next book →'; nextBtn.disabled = false; }, 1500);
                 return;
             }
-            if (next.playlistId) localStorage.setItem(ACTIVE_KEY, next.playlistId);
             location.href = next.url;
         });
 
         row.appendChild(label);
+        row.appendChild(readingBtn);
         row.appendChild(nextBtn);
 
         const track = document.createElement('div');
@@ -212,28 +237,62 @@
         wrapper.appendChild(row);
         wrapper.appendChild(track);
         document.body.appendChild(wrapper);
-        document.body.style.paddingTop = '3.6em';
+        document.body.style.paddingTop = '4.4em';
     }
 
     function escapeText(s) {
         return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
     }
 
+    let cachedBookTitle = '';
+
+    async function loadBookTitle() {
+        const id = currentBookId();
+        if (!id) return;
+        try {
+            const data = await getData();
+            const playlists = (data && data.playlists) || {};
+            for (const p of Object.values(playlists)) {
+                for (const b of (p.books || [])) {
+                    if (b.id === id && b.title) {
+                        cachedBookTitle = b.title;
+                        const label = document.getElementById('reader-progress-label');
+                        if (label) updateProgressDisplay();
+                        return;
+                    }
+                }
+            }
+        } catch {}
+    }
+
     function getBookTitle() {
-        const meta = document.querySelector('meta[name="dcterms.title"], meta[property="og:title"], meta[name="book"]');
+        if (cachedBookTitle) return cachedBookTitle;
+        const meta = document.querySelector(
+            'meta[name="dcterms.title"], meta[property="og:title"], meta[name="book"], meta[name="citation_book_title"]'
+        );
         if (meta) {
             const v = meta.getAttribute('content');
             if (v) return v.trim();
         }
+        const headerBookEl = document.querySelector('[data-book-title], .o-book-title, [class*="bookTitle"], [class*="book-title"]');
+        if (headerBookEl && headerBookEl.textContent.trim()) return headerBookEl.textContent.trim();
         const t = (document.title || '').trim();
         return t.split(/ \| | - O'Reilly| — O'Reilly/)[0] || t;
     }
 
     function getChapterTitle() {
-        for (let i = index; i >= 0; i--) {
+        for (let i = 0; i < groupedBlocks.length; i++) {
             const h = groupedBlocks[i] && groupedBlocks[i].querySelector('h1, h2, h3, h4');
             if (h && h.textContent.trim()) return h.textContent.trim();
         }
+        const container = document.querySelector('#sbo-rt-content');
+        if (container) {
+            const h = container.querySelector('h1, h2, h3, h4');
+            if (h && h.textContent.trim()) return h.textContent.trim();
+        }
+        const t = (document.title || '').trim();
+        const cleaned = t.split(/ \| | - O'Reilly| — O'Reilly/)[0];
+        if (cleaned && cachedBookTitle && cleaned !== cachedBookTitle) return cleaned;
         return '';
     }
 
@@ -250,7 +309,8 @@
         const meta = `Section ${index + 1} of ${groupedBlocks.length} · ${percent}% read`;
         label.innerHTML = `
             <div style="font-size:0.85em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeText(book)}</div>
-            <div style="font-size:0.72em;font-weight:500;letter-spacing:0.2px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${chapter ? escapeText(chapter) + ' · ' : ''}${meta}</div>
+            ${chapter ? `<div style="font-size:0.78em;font-weight:600;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeText(chapter)}</div>` : ''}
+            <div style="font-size:0.7em;font-weight:500;letter-spacing:0.2px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${meta}</div>
         `;
         fill.style.width = `${percent}%`;
     }
@@ -269,15 +329,15 @@
             text-transform: uppercase;
             font-family: ui-monospace, "SF Mono", Menlo, monospace;
             cursor: pointer;
-            color: #111111;
-            background: #ffffff;
+            color: #ffffff;
+            background: #d80000;
             border: 2px solid #111111;
             border-radius: 4px;
             box-shadow: 4px 4px 0 0 #111111;
             transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease;
         `;
-        btn.addEventListener('mouseenter', () => btn.style.background = '#f5f5f5');
-        btn.addEventListener('mouseleave', () => btn.style.background = '#ffffff');
+        btn.addEventListener('mouseenter', () => btn.style.background = '#ff1a1a');
+        btn.addEventListener('mouseleave', () => btn.style.background = '#d80000');
         btn.addEventListener('mousedown', () => {
             btn.style.transform = 'translate(4px, 4px)';
             btn.style.boxShadow = '0 0 0 0 #111111';
@@ -385,6 +445,7 @@
         index = await loadProgress();
         waitForContent();
         warmPlaylist();
+        loadBookTitle();
     }
 
     init();

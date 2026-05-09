@@ -14,11 +14,12 @@
         collectionSkeleton, collectionTitle,
         pickNextBook,
         createPlaylist, removeCollectionItem, reorderPlaylistBooks,
+        getCurrentlyReading, removeFromCurrentlyReading, isCurrentlyReading,
+        CURRENTLY_READING_KEY,
     } = window.OReillyAPI;
 
     const STATE_KEY = 'oreilly-reader-sidebar-state';
     const LIST_CACHE_KEY = 'oreilly-reader-playlists-last-listed';
-    const ACTIVE_KEY = 'oreilly-reader-active-playlist';
     const LIST_TTL_MS = 60 * 60 * 1000; // 1h
 
     const host = document.createElement('div');
@@ -218,10 +219,47 @@
         }
         .toast.show { opacity: 1; }
 
-        .folder.active > .folder-row { border-color: #d80000; box-shadow: 2px 2px 0 0 #d80000; }
-        .folder.active > .folder-row:hover { box-shadow: 3px 3px 0 0 #d80000; }
-        .folder.active > .folder-row:active { box-shadow: 0 0 0 0 #d80000; }
-        .folder.active > .folder-row .folder-name { color: #111111; font-weight: 700; }
+        .reading-section {
+            margin: 4px 10px 14px;
+            padding-bottom: 14px;
+            border-bottom: 2px solid #111111;
+        }
+        .reading-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 4px 8px;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
+            font-size: 11px;
+            font-weight: 700;
+            color: #111111;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .reading-grid {
+            display: grid !important;
+            padding: 4px 0 0;
+        }
+        .reading-remove {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #ffffff;
+            color: #111111;
+            border: 1.5px solid #111111;
+            font-size: 13px;
+            line-height: 1;
+            padding: 0;
+            cursor: pointer;
+            opacity: 0;
+            z-index: 4;
+            transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+        }
+        .tile:hover .reading-remove { opacity: 1; }
+        .reading-remove:hover { background: #d80000; color: #ffffff; border-color: #d80000; }
 
         .grid {
             display: none;
@@ -344,15 +382,15 @@
             width: 22px;
             height: 56px;
             background: #ffffff;
-            color: #d80000;
+            color: #111111;
             border: 2px solid #111111;
             border-left: none;
             border-radius: 0 4px 4px 0;
             box-shadow: 2px 2px 0 0 #111111;
             cursor: pointer;
             z-index: 2147483647;
-            font-size: 16px;
-            font-weight: 700;
+            font-size: 18px;
+            font-weight: 900;
             padding: 0;
             transition: left 0.22s ease, background 0.12s ease, transform 0.06s ease, box-shadow 0.06s ease;
         }
@@ -653,10 +691,10 @@
 
     function renderTile(book, latest, curBook, pid, playlist) {
         const tile = document.createElement('div');
-        const isCurrent = book.id === curBook;
-        tile.className = 'tile' + (isCurrent ? ' current' : '');
+        const isReading = isCurrentlyReading(book.id);
+        tile.className = 'tile' + (isReading ? ' reading' : '');
         tile.title = book.title;
-        if (isCurrent) {
+        if (isReading) {
             const bm = document.createElement('span');
             bm.className = 'bookmark';
             tile.appendChild(bm);
@@ -703,7 +741,6 @@
         }
 
         tile.addEventListener('click', () => {
-            if (pid) localStorage.setItem(ACTIVE_KEY, pid);
             if (targetUrl) location.href = targetUrl;
         });
 
@@ -789,19 +826,54 @@
             return;
         }
 
-        const activePid = localStorage.getItem(ACTIVE_KEY) || '';
         const frag = document.createDocumentFragment();
+
+        const readingIds = getCurrentlyReading();
+        if (readingIds.length) {
+            const bookIndex = new Map();
+            for (const p of Object.values(playlists)) {
+                for (const b of (p.books || [])) {
+                    if (!bookIndex.has(b.id)) bookIndex.set(b.id, { ...b, _pid: p.id, _playlist: p });
+                }
+            }
+            const reading = readingIds.map(id => bookIndex.get(id)).filter(Boolean);
+            if (reading.length) {
+                const section = document.createElement('div');
+                section.className = 'reading-section';
+                const header = document.createElement('div');
+                header.className = 'reading-header';
+                header.innerHTML = `<span>Currently Reading</span><span class="folder-count">${reading.length}</span>`;
+                section.appendChild(header);
+                const grid = document.createElement('div');
+                grid.className = 'grid reading-grid';
+                for (const b of reading) {
+                    const tile = renderTile(b, latest, curBook, b._pid, b._playlist);
+                    const remove = document.createElement('button');
+                    remove.className = 'reading-remove';
+                    remove.title = 'Remove from Currently Reading';
+                    remove.textContent = '×';
+                    remove.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        removeFromCurrentlyReading(b.id);
+                        window.dispatchEvent(new CustomEvent('oreilly-reading-changed'));
+                        render(data);
+                    });
+                    tile.appendChild(remove);
+                    grid.appendChild(tile);
+                }
+                section.appendChild(grid);
+                frag.appendChild(section);
+            }
+        }
+
         for (const pid of ids) {
             const p = playlists[pid];
             const folder = document.createElement('div');
-            folder.className = 'folder'
-                + (state.expanded[pid] ? ' open' : '')
-                + (pid === activePid ? ' active' : '');
+            folder.className = 'folder' + (state.expanded[pid] ? ' open' : '');
 
             const row = document.createElement('div');
             row.className = 'folder-row';
-            const isActive = pid === activePid;
-            row.title = isActive ? 'Active playlist · shift+click to clear' : 'Click to expand · shift+click to set as active';
+            row.title = 'Click to expand';
             row.innerHTML = `
                 <span class="chev">❯</span>
                 <span class="folder-name">${escapeHtml(p.title || pid)}</span>
@@ -814,15 +886,7 @@
             renderGrid(grid, p.books, latest, curBook, pid, p);
             folder.appendChild(grid);
 
-            row.addEventListener('click', (e) => {
-                if (e.shiftKey) {
-                    e.preventDefault();
-                    const current = localStorage.getItem(ACTIVE_KEY);
-                    if (current === pid) localStorage.removeItem(ACTIVE_KEY);
-                    else localStorage.setItem(ACTIVE_KEY, pid);
-                    render(data);
-                    return;
-                }
+            row.addEventListener('click', () => {
                 const wasOpen = folder.classList.contains('open');
                 folder.classList.toggle('open', !wasOpen);
                 state.expanded[pid] = !wasOpen;
@@ -894,6 +958,8 @@
             setTimeout(() => { if (!input.disabled && !input.value) cancel(); }, 150);
         });
     });
+
+    window.addEventListener('oreilly-reading-changed', () => { refresh(); });
 
     window.addEventListener('keydown', (e) => {
         const realTarget = (e.composedPath && e.composedPath()[0]) || e.target;

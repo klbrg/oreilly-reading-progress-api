@@ -178,7 +178,35 @@
 
     // --- next-book picker (used by reader and sidebar) ---
 
-    const ACTIVE_PLAYLIST_KEY = 'oreilly-reader-active-playlist';
+    const CURRENTLY_READING_KEY = 'oreilly-reader-currently-reading';
+
+    function getCurrentlyReading() {
+        try { return JSON.parse(localStorage.getItem(CURRENTLY_READING_KEY)) || []; }
+        catch { return []; }
+    }
+    function setCurrentlyReading(ids) {
+        try { localStorage.setItem(CURRENTLY_READING_KEY, JSON.stringify(ids)); } catch {}
+    }
+    function addToCurrentlyReading(bookId) {
+        if (!bookId) return;
+        const list = getCurrentlyReading();
+        if (!list.includes(bookId)) {
+            list.push(bookId);
+            setCurrentlyReading(list);
+        }
+    }
+    function removeFromCurrentlyReading(bookId) {
+        if (!bookId) return;
+        const list = getCurrentlyReading();
+        const idx = list.indexOf(bookId);
+        if (idx >= 0) {
+            list.splice(idx, 1);
+            setCurrentlyReading(list);
+        }
+    }
+    function isCurrentlyReading(bookId) {
+        return getCurrentlyReading().includes(bookId);
+    }
 
     function bookIdFromUrl(url) {
         try {
@@ -203,36 +231,37 @@
     }
 
     async function nextCandidates() {
-        const activePid = localStorage.getItem(ACTIVE_PLAYLIST_KEY);
+        const ids = getCurrentlyReading();
+        if (!ids.length) return [];
         let data;
         try { data = await getData(); } catch { return []; }
         const playlists = data.playlists || {};
         const storage = data.storage || {};
         const curBook = bookIdFromUrl(location.href);
 
-        let playlist = activePid && playlists[activePid];
-        if (!playlist) {
-            for (const p of Object.values(playlists)) {
-                if ((p.books || []).some(b => b.id === curBook)) { playlist = p; break; }
+        const bookIndex = new Map();
+        for (const p of Object.values(playlists)) {
+            for (const b of (p.books || [])) {
+                if (!bookIndex.has(b.id)) bookIndex.set(b.id, { ...b, playlistId: p.id });
             }
         }
-        if (!playlist || !(playlist.books || []).length) return [];
 
-        const order = playlist.books;
-        const n = order.length;
-        const curIdx = order.findIndex(b => b.id === curBook);
         const latest = latestByBook(storage);
+        const n = ids.length;
+        const curIdx = ids.indexOf(curBook);
         const ordered = [];
         for (let offset = 1; offset <= n; offset++) {
             const idx = ((curIdx >= 0 ? curIdx : -1) + offset + n) % n;
-            const b = order[idx];
-            if (b.id === curBook) continue;
+            const id = ids[idx];
+            if (id === curBook) continue;
+            const b = bookIndex.get(id);
+            if (!b) continue;
             const entry = latest.get(b.id);
             ordered.push({
                 bookId: b.id,
                 url: entry?.url || b.url,
                 title: b.title,
-                playlistId: playlist.id,
+                playlistId: b.playlistId,
             });
         }
         return ordered;
@@ -256,7 +285,11 @@
     window.OReillyAPI = {
         API_URL,
         OREILLY,
-        ACTIVE_PLAYLIST_KEY,
+        CURRENTLY_READING_KEY,
+        getCurrentlyReading,
+        addToCurrentlyReading,
+        removeFromCurrentlyReading,
+        isCurrentlyReading,
         getData,
         saveProgress,
         savePlaylist,
