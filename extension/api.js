@@ -151,14 +151,6 @@
         return mutate(`${OREILLY}/api/v3/collection-items/${encodeURIComponent(itemId)}/`, 'DELETE');
     }
 
-    async function reorderPlaylistBooks(pid, ourns) {
-        return mutate(
-            `${OREILLY}/api/v3/collections/${encodeURIComponent(pid)}/reorder-content-ourns/`,
-            'POST',
-            { content: [ourns] }
-        );
-    }
-
     async function fetchBookMeta(isbn, type = 'book') {
         const raw = await tryJson([
             `${OREILLY}/api/v2/epubs/urn:orm:${type}:${encodeURIComponent(isbn)}/`,
@@ -303,7 +295,6 @@
         deletePlaylistRemote,
         addBooksToPlaylist,
         removeCollectionItem,
-        reorderPlaylistBooks,
         bookIdFromUrl,
         latestByBook,
         pickNextBook,
