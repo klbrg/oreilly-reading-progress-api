@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         O'Reilly Reader (Single Block Navigation + Full Storage Sync)
+// @name         O'Reilly Reader (Progressive Reveal + API Sync)
 // @namespace    http://tampermonkey.net/
-// @version      4.1.0
-// @description  Show one section at a time on O'Reilly chapters, save progress locally, and POST the entire localStorage to localhost
+// @version      6.0.0
+// @description  Progressively reveal sections on O'Reilly chapters via a Next Section button, save progress to localhost API
 // @match        https://learning.oreilly.com/library/view/*
 // @grant        none
 // @run-at       document-idle
@@ -11,56 +11,44 @@
 (function () {
     'use strict';
 
-    const API_URL = 'http://localhost:44433/update';
+    const API_URL = 'http://localhost:44433';
 
-    // Create a unique key for saving progress, based on the URL path
     const storageKey = 'oreilly-reader-progress-' + location.pathname.split('/').filter(Boolean).join('-');
     console.log(`[Reader] Storage Key: ${storageKey}`);
 
-    // Try to load saved progress from localStorage
-    let saved = {};
-    try {
-        saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
-    } catch (e) {
-        console.warn('[Reader] Failed to parse saved progress', e);
-        saved = {};
-    }
-
-    // Restore last read section index, or start at 0
-    let index = typeof saved.index === 'number' ? saved.index : 0;
-    console.log(`[Reader] Restored index: ${index}`);
-
+    let index = 0;
     let groupedBlocks = [];
 
-    // 🔥 Send the localStorage as JSON to the backend
-    async function postFullLocalStorage() {
+    async function loadProgress() {
         try {
-            const storageDump = {};
-            const prefix = "oreilly-reader-progress";
-
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.startsWith(prefix)) {
-                    try {
-                        storageDump[key] = JSON.parse(localStorage.getItem(key));
-                    } catch {
-                        storageDump[key] = localStorage.getItem(key);
-                    }
-                }
+            const res = await fetch(`${API_URL}/data`);
+            const json = await res.json();
+            if (json.status === 'ok' && json.data?.storage?.[storageKey]) {
+                return json.data.storage[storageKey].index ?? 0;
             }
-
-            const payload = { title: document.title, storage: storageDump };
-
-            await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-
-            console.log('[Reader] ✅ Posted filtered localStorage (oreilly-reader-progress*) to FastAPI');
         } catch (err) {
-            alert("[Reader] ❌ Failed to post filtered localStorage");
-            console.warn('[Reader] ❌ Failed to post filtered localStorage:', err);
+            console.warn('[Reader] Failed to load progress from API', err);
+        }
+        return 0;
+    }
+
+    async function saveProgress() {
+        const progressData = {
+            index,
+            date: new Date().toISOString(),
+            url: location.href,
+            title: document.title,
+        };
+        try {
+            await fetch(`${API_URL}/update`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ storage: { [storageKey]: progressData } }),
+            });
+            console.log(`[Reader] Saved index ${index}`);
+        } catch (err) {
+            alert("[Reader] ❌ Failed to save progress");
+            console.warn('[Reader] ❌ Failed to save progress:', err);
         }
     }
 
@@ -161,71 +149,134 @@
     }
 
     function createProgressDisplay(container) {
-        const progressDisplay = document.createElement('div');
-        progressDisplay.style.position = 'sticky';
-        progressDisplay.style.top = '0';
-        progressDisplay.style.padding = '0.5em 1em';
-        progressDisplay.style.fontSize = '0.9em';
-        progressDisplay.style.borderBottom = '1px solid #ccc';
-        progressDisplay.style.marginBottom = '1em';
-        progressDisplay.style.zIndex = '100';
-        progressDisplay.id = 'reader-progress';
-        container.parentElement.insertBefore(progressDisplay, container);
+        const wrapper = document.createElement('div');
+        wrapper.id = 'reader-progress';
+        wrapper.style.position = 'fixed';
+        wrapper.style.top = '0';
+        wrapper.style.left = '0';
+        wrapper.style.right = '0';
+        wrapper.style.zIndex = '999999';
+        wrapper.style.background = '#fff';
+        wrapper.style.borderBottom = '1px solid #ddd';
+
+        const label = document.createElement('div');
+        label.id = 'reader-progress-label';
+        label.style.padding = '0.4em 1em 0.3em';
+        label.style.fontSize = '1em';
+        label.style.color = '#555';
+
+        const track = document.createElement('div');
+        track.style.height = '4px';
+        track.style.background = '#e8e8e8';
+
+        const fill = document.createElement('div');
+        fill.id = 'reader-progress-fill';
+        fill.style.height = '100%';
+        fill.style.background = '#c0392b';
+        fill.style.width = '0%';
+        fill.style.transition = 'width 0.3s ease';
+
+        track.appendChild(fill);
+        wrapper.appendChild(label);
+        wrapper.appendChild(track);
+        document.body.appendChild(wrapper);
+        document.body.style.paddingTop = '3em';
     }
 
     function updateProgressDisplay() {
-        const el = document.getElementById('reader-progress');
-        if (!el) return;
-        const seenBlocks = groupedBlocks.slice(0, index + 1);
+        const label = document.getElementById('reader-progress-label');
+        const fill = document.getElementById('reader-progress-fill');
+        if (!label || !fill) return;
         const getWordCount = el => el.textContent.trim().split(/\s+/).length;
-        const wordsRead = seenBlocks.reduce((sum, block) => sum + getWordCount(block), 0);
+        const wordsRead = groupedBlocks.slice(0, index + 1).reduce((sum, block) => sum + getWordCount(block), 0);
         const totalWords = groupedBlocks.reduce((sum, block) => sum + getWordCount(block), 0);
         const percent = totalWords > 0 ? Math.floor((wordsRead / totalWords) * 100) : 0;
-        el.textContent = `Section ${index + 1} of ${groupedBlocks.length} · ${percent}% read`;
+        label.textContent = `Section ${index + 1} of ${groupedBlocks.length} · ${percent}% read`;
+        fill.style.width = `${percent}%`;
+    }
+
+    function createNextButton(container) {
+        const btn = document.createElement('button');
+        btn.id = 'reader-next-btn';
+        btn.textContent = 'Read more';
+        btn.style.display = 'block';
+        btn.style.margin = '2em auto';
+        btn.style.padding = '0.6em 1.6em';
+        btn.style.fontSize = '1em';
+        btn.style.cursor = 'pointer';
+        btn.style.borderRadius = '6px';
+        btn.style.border = '1px solid #888';
+        btn.addEventListener('click', () => advance(container));
+        container.appendChild(btn);
     }
 
     function render(container) {
         index = Math.max(0, Math.min(index, groupedBlocks.length - 1));
         container.innerHTML = '';
-        container.appendChild(groupedBlocks[index]);
+        for (let i = 0; i <= index; i++) {
+            container.appendChild(groupedBlocks[i]);
+        }
         updateProgressDisplay();
-        console.log(`[Reader] Showing index ${index}`);
+        if (index < groupedBlocks.length - 1) {
+            createNextButton(container);
+        }
+        console.log(`[Reader] Restored up to index ${index}`);
+        if (index > 0) {
+            setTimeout(() => groupedBlocks[index].scrollIntoView({ behavior: 'instant', block: 'start' }), 500);
+        }
     }
 
-    function update(container) {
-        container.innerHTML = '';
-        container.appendChild(groupedBlocks[index]);
+    function advance(container) {
+        if (index >= groupedBlocks.length - 1) return;
+        index++;
+
+        const existingBtn = document.getElementById('reader-next-btn');
+        if (existingBtn) existingBtn.remove();
+
+        const newBlock = groupedBlocks[index];
+        container.appendChild(newBlock);
+        setTimeout(() => newBlock.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+
+        if (index < groupedBlocks.length - 1) {
+            createNextButton(container);
+        }
+
         updateProgressDisplay();
+        saveProgress();
+    }
 
-        // Save to localStorage
-        const progressData = { index };
-        const url = location.href;
-        progressData.date = new Date().toISOString();
-        progressData.url = url;
-        localStorage.setItem(storageKey, JSON.stringify(progressData));
-        console.log(`[Reader] Updated index to ${index} (saved)`);
+    function retreat(container) {
+        if (index <= 0) return;
 
-        // 🔥 Post *entire* localStorage to backend
-        postFullLocalStorage();
+        const existingBtn = document.getElementById('reader-next-btn');
+        if (existingBtn) existingBtn.remove();
+
+        container.removeChild(groupedBlocks[index]);
+        index--;
+
+        createNextButton(container);
+        setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 50);
+
+        updateProgressDisplay();
+        saveProgress();
     }
 
     function setupNavigation(container) {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'f') {
                 e.preventDefault();
-                if (index < groupedBlocks.length - 1) {
-                    index++;
-                    update(container);
-                }
+                advance(container);
             } else if (e.key === 'd') {
                 e.preventDefault();
-                if (index > 0) {
-                    index--;
-                    update(container);
-                }
+                retreat(container);
             }
         });
     }
 
-    waitForContent();
+    async function init() {
+        index = await loadProgress();
+        waitForContent();
+    }
+
+    init();
 })();

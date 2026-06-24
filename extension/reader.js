@@ -11,19 +11,22 @@
         addToCurrentlyReading, removeFromCurrentlyReading, isCurrentlyReading,
     } = window.OReillyAPI;
 
-    const storageKey = 'oreilly-reader-progress-' + location.pathname.split('/').filter(Boolean).join('-');
-    console.log(`[Reader] Storage Key: ${storageKey}`);
+    function storageKey() {
+        return 'oreilly-reader-progress-' + location.pathname.split('/').filter(Boolean).join('-');
+    }
 
     function currentBookId() { return bookIdFromUrl(location.href); }
 
     let index = 0;
     let groupedBlocks = [];
+    let navHandler = null;
 
     async function loadProgress() {
+        const key = storageKey();
         try {
             const data = await getData();
-            if (data?.storage?.[storageKey]) {
-                return data.storage[storageKey].index ?? 0;
+            if (data?.storage?.[key]) {
+                return data.storage[key].index ?? 0;
             }
         } catch (err) {
             console.warn('[Reader] Failed to load progress from API', err);
@@ -39,7 +42,7 @@
             title: document.title,
         };
         try {
-            await saveProgress(storageKey, entry);
+            await saveProgress(storageKey(), entry);
             console.log(`[Reader] Saved index ${index}`);
         } catch (err) {
             alert('[Reader] Failed to save progress');
@@ -168,6 +171,53 @@
         label.style.lineHeight = '1.25';
         label.style.overflow = 'hidden';
 
+        const reloadBtn = document.createElement('button');
+        reloadBtn.id = 'reader-reload-btn';
+        reloadBtn.textContent = 'Reload';
+        reloadBtn.title = 'Reload page';
+        reloadBtn.style.cssText = 'padding:0.25em 0.8em;font-size:0.75em;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;font-family:ui-monospace,"SF Mono",Menlo,monospace;border:2px solid #111111;border-radius:3px;background:#ffffff;cursor:pointer;color:#111111;box-shadow:2px 2px 0 0 #111111;transition:transform 0.06s ease,box-shadow 0.06s ease,background 0.12s ease;';
+        reloadBtn.addEventListener('mouseenter', () => reloadBtn.style.background = '#f5f5f5');
+        reloadBtn.addEventListener('mouseleave', () => reloadBtn.style.background = '#ffffff');
+        reloadBtn.addEventListener('mousedown', () => { reloadBtn.style.transform = 'translate(2px,2px)'; reloadBtn.style.boxShadow = '0 0 0 0 #111111'; });
+        const releaseReloadPress = () => { reloadBtn.style.transform = ''; reloadBtn.style.boxShadow = '2px 2px 0 0 #111111'; };
+        reloadBtn.addEventListener('mouseup', releaseReloadPress);
+        reloadBtn.addEventListener('mouseleave', releaseReloadPress);
+        reloadBtn.addEventListener('click', () => location.reload());
+
+        const resetBtn = document.createElement('button');
+        resetBtn.id = 'reader-reset-btn';
+        resetBtn.textContent = 'Reset';
+        resetBtn.title = 'Reset chapter progress (click twice)';
+        resetBtn.style.cssText = 'padding:0.25em 0.8em;font-size:0.75em;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;font-family:ui-monospace,"SF Mono",Menlo,monospace;border:2px solid #111111;border-radius:3px;background:#ffffff;cursor:pointer;color:#111111;box-shadow:2px 2px 0 0 #111111;transition:transform 0.06s ease,box-shadow 0.06s ease,background 0.12s ease,color 0.12s ease;';
+        let resetArmed = false;
+        let resetRevert = null;
+        resetBtn.addEventListener('mouseenter', () => { if (!resetArmed) resetBtn.style.background = '#f5f5f5'; });
+        resetBtn.addEventListener('mouseleave', () => { if (!resetArmed) resetBtn.style.background = '#ffffff'; });
+        resetBtn.addEventListener('mousedown', () => { resetBtn.style.transform = 'translate(2px,2px)'; resetBtn.style.boxShadow = '0 0 0 0 #111111'; });
+        const releaseResetPress = () => { resetBtn.style.transform = ''; resetBtn.style.boxShadow = '2px 2px 0 0 #111111'; };
+        resetBtn.addEventListener('mouseup', releaseResetPress);
+        resetBtn.addEventListener('click', async () => {
+            if (!resetArmed) {
+                resetArmed = true;
+                resetBtn.textContent = '?';
+                resetBtn.style.background = '#d80000';
+                resetBtn.style.color = '#ffffff';
+                resetRevert = setTimeout(() => {
+                    resetArmed = false;
+                    resetBtn.textContent = 'Reset';
+                    resetBtn.style.background = '#ffffff';
+                    resetBtn.style.color = '#111111';
+                }, 2500);
+                return;
+            }
+            clearTimeout(resetRevert);
+            resetArmed = false;
+            resetBtn.textContent = 'Reset';
+            resetBtn.style.background = '#ffffff';
+            resetBtn.style.color = '#111111';
+            if (window.__oreillyReaderReset) await window.__oreillyReaderReset();
+        });
+
         const readingBtn = document.createElement('button');
         readingBtn.id = 'reader-reading-btn';
         const baseBtnCss = 'padding:0.25em 0.8em;font-size:0.75em;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;font-family:ui-monospace, "SF Mono", Menlo, monospace;border:2px solid #111111;border-radius:3px;cursor:pointer;box-shadow:2px 2px 0 0 #111111;transition:transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease, color 0.12s ease;';
@@ -218,6 +268,8 @@
         });
 
         row.appendChild(label);
+        row.appendChild(reloadBtn);
+        row.appendChild(resetBtn);
         row.appendChild(readingBtn);
         row.appendChild(nextBtn);
 
@@ -404,7 +456,8 @@
     }
 
     function setupNavigation(container) {
-        const handler = (e) => {
+        if (navHandler) window.removeEventListener('keydown', navHandler, true);
+        navHandler = (e) => {
             const realTarget = (e.composedPath && e.composedPath()[0]) || e.target;
             if (realTarget && realTarget.matches && realTarget.matches('input, textarea, [contenteditable="true"]')) return;
             if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -418,7 +471,7 @@
                 retreat(container);
             }
         };
-        window.addEventListener('keydown', handler, true);
+        window.addEventListener('keydown', navHandler, true);
     }
 
     async function warmPlaylist() {
@@ -447,6 +500,14 @@
         warmPlaylist();
         loadBookTitle();
     }
+
+    async function resetChapterProgress() {
+        index = 0;
+        try { await persist(); } catch {}
+        const container = document.querySelector('#sbo-rt-content');
+        if (container && groupedBlocks.length > 0) render(container);
+    }
+    window.__oreillyReaderReset = resetChapterProgress;
 
     init();
 })();
