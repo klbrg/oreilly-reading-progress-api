@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import asyncio
 import subprocess
 import json
 from datetime import datetime
@@ -63,6 +64,52 @@ app.add_middleware(
 )
 
 
+# Push the progress repo in batches rather than on every commit: whenever 100
+# commits have piled up, or at least every 5 minutes — whichever comes first.
+PUSH_INTERVAL_SECONDS = 5 * 60
+PUSH_COMMIT_THRESHOLD = 100
+_commits_since_push = 0
+_push_lock = asyncio.Lock()
+
+
+async def _git_push():
+    """Push pending commits to the remote, resetting the pending counter.
+
+    On failure the counter is left intact so the next trigger retries.
+    """
+    global _commits_since_push
+    async with _push_lock:
+        if _commits_since_push == 0:
+            return
+        try:
+            subprocess.run(["git", "push"], cwd=GIT_REPO_PATH, check=True)
+            _commits_since_push = 0
+        except subprocess.CalledProcessError as e:
+            print(f"git push failed: {e}")
+
+
+async def _commit_progress(commit_message: str):
+    """Stage and commit the data file, pushing once the threshold is reached."""
+    global _commits_since_push
+    relative_path = os.path.relpath(DATA_FILE, GIT_REPO_PATH)
+    subprocess.run(["git", "add", relative_path], cwd=GIT_REPO_PATH, check=True)
+    subprocess.run(["git", "commit", "-m", commit_message], cwd=GIT_REPO_PATH, check=True)
+    _commits_since_push += 1
+    if _commits_since_push >= PUSH_COMMIT_THRESHOLD:
+        await _git_push()
+
+
+async def _periodic_push():
+    while True:
+        await asyncio.sleep(PUSH_INTERVAL_SECONDS)
+        await _git_push()
+
+
+@app.on_event("startup")
+async def _start_push_loop():
+    asyncio.create_task(_periodic_push())
+
+
 @app.get("/data", response_model=DataResponse)
 async def get_data():
     if not os.path.exists(DATA_FILE):
@@ -97,10 +144,8 @@ async def update_key(body: StorageUpdate):
     index = first_entry.get("index", "?")
     commit_message = f"chore(progress): {title} — section {index}"
 
-    relative_path = os.path.relpath(DATA_FILE, GIT_REPO_PATH)
     try:
-        subprocess.run(["git", "add", relative_path], cwd=GIT_REPO_PATH, check=True)
-        subprocess.run(["git", "commit", "-m", commit_message], cwd=GIT_REPO_PATH, check=True)
+        await _commit_progress(commit_message)
     except subprocess.CalledProcessError as e:
         return {"status": "error", "message": str(e)}
 
@@ -155,10 +200,8 @@ async def update_data(body: StoragePayload):
     index = first_entry.get("index", "?")
     commit_message = f"chore(progress): {title} — section {index}"
 
-    relative_path = os.path.relpath(DATA_FILE, GIT_REPO_PATH)
     try:
-        subprocess.run(["git", "add", relative_path], cwd=GIT_REPO_PATH, check=True)
-        subprocess.run(["git", "commit", "-m", commit_message], cwd=GIT_REPO_PATH, check=True)
+        await _commit_progress(commit_message)
     except subprocess.CalledProcessError as e:
         return {"status": "error", "message": str(e)}
 
