@@ -75,13 +75,16 @@ _push_lock = asyncio.Lock()
 async def _git_push():
     """Push pending commits to the remote, resetting the pending counter.
 
-    On failure the counter is left intact so the next trigger retries.
+    Rebases on top of the remote first so a divergent remote (e.g. edits made
+    from another machine) is reconciled rather than rejecting the push. On
+    failure the counter is left intact so the next trigger retries.
     """
     global _commits_since_push
     async with _push_lock:
         if _commits_since_push == 0:
             return
         try:
+            subprocess.run(["git", "pull", "--rebase"], cwd=GIT_REPO_PATH, check=True)
             subprocess.run(["git", "push"], cwd=GIT_REPO_PATH, check=True)
             _commits_since_push = 0
         except subprocess.CalledProcessError as e:
